@@ -11,15 +11,17 @@ Academic Translator is a Python tool that converts complex academic research pap
 
 ```
 Academic-Translator/
-├── academic_translator.py      # Main application (~1,500 lines)
+├── academic_translator.py       # Main application (~820 lines)
 │                                # - AcademicTranslationResult dataclass
 │                                # - AccessibilityModule ABC
-│                                # - AcademicTranslator class
-│                                # - CLI entry point
+│                                # - AcademicTranslator class (20 methods)
+│                                # - CLI entry point (main function)
 ├── modules/                    # Pluggable accessibility modules
 │   ├── ADHD_accessibility.py   # Chunks text, progress indicators, brain breaks
-│   ├── dyslexia_accessibilty.py # Simplified vocabulary, pronunciation guides
+│   ├── dyslexia_accessibility.py # Simplified vocabulary, pronunciation guides
 │   └── visual_processing.py   # ASCII diagrams, flowcharts, visual metaphors
+├── requirements.txt            # Python dependencies
+├── .gitignore                  # Git ignore rules
 ├── README.md                   # Project documentation
 └── LICENSE                     # MIT License
 ```
@@ -60,7 +62,7 @@ Modules are discovered at runtime from the `modules/` directory via `importlib`.
 - **python-docx** — Word document handling
 - **requests** — HTTP calls
 
-> Note: No `requirements.txt` file exists yet. Install dependencies manually with pip.
+Install with: `pip install -r requirements.txt`
 
 ## Running the Application
 
@@ -102,10 +104,8 @@ No formal test suite exists. There are no test files, no pytest/unittest configu
 
 ## Known Issues
 
-- Duplicate class definitions exist in `academic_translator.py` (the dataclass and ABC are defined twice)
-- Module filename typo: `dyslexia_accessibilty.py` (misspelled "accessibility")
-- No `requirements.txt` or `pyproject.toml` for dependency management
-- No `.gitignore` file
+- No `pyproject.toml` for modern Python packaging
+- No formal test suite or CI/CD pipeline
 
 ## Development Notes
 
