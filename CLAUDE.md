@@ -53,6 +53,7 @@ Modules are discovered at runtime from the `modules/` directory via `importlib`.
 - Inherit from `AccessibilityModule`
 - Implement all abstract methods
 - Be a `.py` file in `modules/`
+- Name its class `<Name>Module` (e.g. `ADHDModule`) — the CLI short name is derived by stripping `Module` and lowercasing (e.g. `adhd`)
 
 ## Dependencies
 

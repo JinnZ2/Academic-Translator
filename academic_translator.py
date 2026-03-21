@@ -205,25 +205,42 @@ class AcademicTranslator:
             'sd =': 'standard deviation (how spread out the data is):',
         }
 
-    def discover_modules(self) -> List[str]:
-        """Discover available accessibility modules"""
-        modules = []
+    def discover_modules(self) -> Dict[str, str]:
+        """Discover available accessibility modules and return short_name -> module_stem mapping"""
+        modules = {}
         modules_dir = Path(__file__).parent / 'modules'
 
         if modules_dir.exists():
-            for file in modules_dir.glob('*_module.py'):
-                module_name = file.stem
-                modules.append(module_name)
+            for file in modules_dir.glob('*.py'):
+                if file.name.startswith('__'):
+                    continue
+                stem = file.stem
+                try:
+                    mod = importlib.import_module(f"modules.{stem}")
+                    for attr_name in dir(mod):
+                        attr = getattr(mod, attr_name)
+                        if (isinstance(attr, type) and
+                            issubclass(attr, AccessibilityModule) and
+                            attr != AccessibilityModule):
+                            # Derive short name: ADHDModule -> adhd, DyslexiaModule -> dyslexia, VisualModule -> visual
+                            short_name = attr_name.replace('Module', '').lower()
+                            modules[short_name] = stem
+                            break
+                except Exception:
+                    continue
 
         return modules
 
     def load_module(self, module_name: str) -> Optional[AccessibilityModule]:
-        """Load a specific accessibility module"""
+        """Load a specific accessibility module by short name or module stem"""
         if module_name in self.loaded_modules:
             return self.loaded_modules[module_name]
 
+        # Resolve short name (e.g. 'adhd') to module stem (e.g. 'ADHD_accessibility')
+        module_stem = self.available_modules.get(module_name, module_name)
+
         try:
-            module_path = f"modules.{module_name}"
+            module_path = f"modules.{module_stem}"
             module = importlib.import_module(module_path)
 
             # Find the module class (should end with 'Module')
@@ -733,8 +750,7 @@ def main():
     parser = argparse.ArgumentParser(description='Translate academic papers into accessible formats')
     parser.add_argument('--file', '-f', help='Academic paper file (PDF, DOCX, TXT)')
     parser.add_argument('--text', '-t', help='Direct text input')
-    parser.add_argument('--modules', '-m', nargs='*', help='Accessibility modules to apply',
-                       choices=['adhd', 'visual', 'dyslexia', 'autism', 'audio', 'beginner', 'esl'])
+    parser.add_argument('--modules', '-m', nargs='*', help='Accessibility modules to apply')
     parser.add_argument('--subject', '-s', help='Subject area override',
                        choices=['medical', 'psychology', 'education', 'social_science', 'science'])
     parser.add_argument('--output', '-o', help='Output filename')
@@ -746,10 +762,10 @@ def main():
 
     if args.list_modules:
         print("📚 Available Accessibility Modules:")
-        for module_name in translator.available_modules:
-            module = translator.load_module(module_name)
+        for short_name in translator.available_modules:
+            module = translator.load_module(short_name)
             if module:
-                print(f"   • {module.get_name()}: {module.get_description()}")
+                print(f"   • {short_name}: {module.get_name()} - {module.get_description()}")
         return
 
     # Get text input
