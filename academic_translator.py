@@ -19,6 +19,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from term_matching import TermMatcher
+
 # Running this file as a script would normally make it "__main__", so a module
 # doing `from academic_translator import AccessibilityModule` would import a
 # *second* copy of this file and get a different AccessibilityModule class -
@@ -88,6 +90,7 @@ class AcademicTranslator:
         self.methodology_keywords = self.load_methodology_keywords()
         self.loaded_modules = {}
         self.available_modules = self.discover_modules()
+        self._matchers: Dict[tuple, TermMatcher] = {}
 
     def load_academic_jargon(self) -> Dict[str, Dict[str, str]]:
         """Academic jargon translation dictionary organized by field"""
@@ -102,27 +105,27 @@ class AcademicTranslator:
                 'experimental group': 'group that got the treatment being tested',
                 'placebo': 'fake treatment with no active ingredient',
                 'double-blind': 'neither participants nor researchers knew who got real treatment',
-                'randomized': 'people were randomly assigned to groups',
+                'randomized': 'randomly assigned',
                 'correlation': 'things that tend to happen together (doesn\'t prove cause)',
                 'causation': 'one thing actually causes another',
                 'statistical significance': 'result is probably not due to chance',
                 'p-value': 'probability the result happened by accident',
                 'confidence interval': 'range where the true answer probably lies',
                 'peer review': 'other experts checked this research before publication',
-                'replication': 'repeating the study to see if results hold up',
+                'replication': 'repeat of a study to see if the results hold up',
                 'meta-analysis': 'study that combines results from multiple studies',
             },
             'medical': {
                 'clinical trial': 'research study testing treatments on people',
                 'randomized controlled trial': 'gold standard study where people are randomly assigned treatments',
-                'cohort study': 'following a group of people over time',
-                'case-control study': 'comparing people with a condition to those without',
+                'cohort study': 'study following a group of people over time',
+                'case-control study': 'study comparing people with a condition to those without',
                 'systematic review': 'comprehensive summary of all research on a topic',
                 'efficacy': 'how well treatment works in ideal conditions',
                 'effectiveness': 'how well treatment works in real-world conditions',
                 'adverse events': 'bad side effects',
                 'contraindication': 'reason not to use this treatment',
-                'comorbidity': 'having multiple health conditions at once',
+                'comorbidity': 'multiple health conditions at once',
                 'prevalence': 'how common a condition is',
                 'incidence': 'how many new cases occur in a time period',
                 'mortality': 'death rate',
@@ -145,8 +148,8 @@ class AcademicTranslator:
             },
             'education': {
                 'pedagogical': 'related to teaching methods',
-                'scaffolding': 'providing support that\'s gradually removed as students learn',
-                'differentiation': 'adapting teaching for different student needs',
+                'scaffolding': 'support that\'s gradually removed as students learn',
+                'differentiation': 'teaching adapted for different student needs',
                 'formative assessment': 'checking understanding during learning',
                 'summative assessment': 'final test of what was learned',
                 'metacognition': 'thinking about thinking - awareness of your own learning',
@@ -155,12 +158,12 @@ class AcademicTranslator:
                 'extrinsic motivation': 'motivation from external rewards',
             },
             'social_science': {
-                'qualitative research': 'studying experiences, meanings, and perspectives',
-                'quantitative research': 'studying numbers and statistics',
-                'ethnography': 'studying culture by observing and participating',
-                'phenomenology': 'studying people\'s lived experiences',
+                'qualitative research': 'research into experiences, meanings, and perspectives',
+                'quantitative research': 'research using numbers and statistics',
+                'ethnography': 'study of culture by observing and participating',
+                'phenomenology': 'study of people\'s lived experiences',
                 'grounded theory': 'developing theory from data rather than testing existing theory',
-                'triangulation': 'using multiple methods to confirm findings',
+                'triangulation': 'use of multiple methods to confirm findings',
                 'thick description': 'rich, detailed account of what was observed',
                 'reflexivity': 'researcher reflecting on how they might bias the study',
             },
@@ -395,42 +398,38 @@ class AcademicTranslator:
             print(f"Error reading Word document: {e}")
             return ""
 
-    def translate_academic_jargon(self, text: str, subject_area: str) -> str:
-        """Replace academic jargon with plain English"""
-        replacements = {}
-        replacements.update(self.academic_jargon['general_research'])
+    def get_matcher(self, subject_area: str, include_statistics: bool = False) -> TermMatcher:
+        """Build (and cache) the term matcher for one subject area"""
+        cache_key = (subject_area, include_statistics)
+        if cache_key in self._matchers:
+            return self._matchers[cache_key]
+
+        glossary = {}
+        glossary.update(self.academic_jargon['general_research'])
+        if include_statistics:
+            glossary.update(self.academic_jargon['statistics'])
         if subject_area in self.academic_jargon:
-            replacements.update(self.academic_jargon[subject_area])
+            glossary.update(self.academic_jargon[subject_area])
 
-        # One combined pass, longest term first. Replacing term-by-term would
-        # let an earlier replacement's plain English get re-translated by a
-        # later term, garbling the output.
-        term_patterns = [
-            r'\b' + re.escape(term) + r'\b'
-            for term in sorted(replacements, key=len, reverse=True)
-        ]
-        term_patterns += [
-            re.escape(term)
-            for term in sorted(self.methodology_keywords, key=len, reverse=True)
-        ]
+        matcher = TermMatcher(glossary, shorthand=self.methodology_keywords)
+        self._matchers[cache_key] = matcher
+        return matcher
 
-        lookup = {term.lower(): plain for term, plain in replacements.items()}
-        stat_lookup = {
-            term.lower(): plain
-            for term, plain in self.methodology_keywords.items()
-        }
+    def translate_academic_jargon(self, text: str, subject_area: str,
+                                  include_statistics: bool = False) -> str:
+        """Replace academic jargon with plain English.
 
-        def substitute(match: re.Match) -> str:
-            matched = match.group(0)
-            key = matched.lower()
+        Matching is inflection-aware (so 'hypotheses' and 'clinical trials'
+        are caught, not just the exact glossary spelling) and sense-aware
+        (so 'we construct a model' and 'political power' are left alone).
+        See term_matching.py.
 
-            if key in lookup:
-                return f"{lookup[key]} ({matched})"
-            if key in stat_lookup:
-                return stat_lookup[key]
-            return matched
-
-        return re.sub('|'.join(term_patterns), substitute, text, flags=re.IGNORECASE)
+        Set include_statistics to also expand the statistics glossary. It is
+        off by default because those terms - 'mean', 'power', 'range' - are
+        the most context-dependent in the book; they are gated, but the gate
+        is a heuristic.
+        """
+        return self.get_matcher(subject_area, include_statistics).translate(text)
 
     def explain_term(self, term: str) -> Optional[str]:
         """Look up a single academic term across every field's glossary"""

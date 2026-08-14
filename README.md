@@ -309,9 +309,46 @@ python academic_translator.py --list-modules
 ### 2. **Jargon Translation**
 
 - **80+ academic terms** translated by field (and growing — PRs welcome)
-- Context-aware replacements preserve meaning
 - Statistical terms simplified (“p<0.05” → “almost certainly not due to chance”)
 - Methodology explanations (“double-blind” → “neither participants nor researchers knew who got real treatment”)
+
+Matching is **inflection-aware** and **sense-aware**, because exact string
+matching fails in both directions (see `term_matching.py`):
+
+| Written in the paper | Naive matching | What we do |
+| --- | --- | --- |
+| “three **hypotheses**” | missed — glossary says *hypothesis* | “three educated **guesses** about what would happen (hypotheses)” |
+| “**n=240**” | missed — glossary says `n =` | “number of people/things studied: 240” |
+| “**randomised**” | missed — British spelling | matched |
+| “scores **correlated** with…” | “scores *things that tend to happen together* with…” | “scores correlated (things that tend to happen together) with…” |
+| “we **construct** a model” | “we *concept being measured* a model” | left alone — it’s a verb here |
+| “erected **scaffolding**” | “erected *support that’s gradually removed as students learn*” | left alone — wrong sense |
+
+Three mechanisms do this:
+
+1. **Inflection** — each term expands into its plural, irregular plural
+   (*analysis → analyses*), and spelling variants. When a plural matches, the
+   plain-English expansion is pluralized to agree, verb included:
+   *“study that combines”* → *“studies that combine”*.
+2. **Vector-space sense matching** — ambiguous terms carry two cue-word
+   vectors, one per sense. The words around each occurrence become a vector
+   too, and the term expands only when the context sits closer to the academic
+   sense by cosine similarity. Terms marked `strict` (*power*, *mean*,
+   *range*) need positive evidence before they expand at all.
+3. **Grammar guard** — a term declared a noun is skipped where local grammar
+   says it’s a verb (“to construct”, “we construct”).
+
+Words that aren’t ambiguous skip the gate entirely, so the common case stays
+fast and predictable.
+
+**Adding your own:** put spelling variants in `TERM_VARIANTS`, different word
+classes (verbs, adjectives) in `TERM_DERIVED` — those are glossed in place
+rather than substituted, so they can’t break the sentence — and ambiguous
+words in `AMBIGUOUS_TERMS` with cue words for each sense.
+
+The statistics glossary (*mean*, *median*, *regression*, *ANOVA*) is off by
+default since those words are the most context-dependent of all. Enable it
+with `translate_academic_jargon(text, subject, include_statistics=True)`.
 
 ### 3. **Content Extraction**
 
@@ -373,6 +410,15 @@ Know confusing academic jargon? Add translations:
     'confusing_term': 'plain English explanation',
 }
 ```
+
+Write the explanation as a **noun phrase** — it gets substituted into the
+sentence, so “study following a group over time” works where “following a
+group over time” reads badly after “two”.
+
+Plurals and spelling variants are handled automatically. If your term is also
+an everyday English word, add it to `AMBIGUOUS_TERMS` in `term_matching.py`
+with cue words for each sense, so it only expands where it means the
+technical thing.
 
 Then run `python test_academic_translator.py` to check nothing broke.
 
