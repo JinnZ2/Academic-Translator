@@ -1,8 +1,26 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
-.venv/
-venv/
+dist/
+build/
+*.egg
 
-# Generated translation reports
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project output
 academic_translations/

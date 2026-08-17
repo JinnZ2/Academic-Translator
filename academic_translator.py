@@ -236,46 +236,54 @@ class AcademicTranslator:
     def modules_dir(self) -> Path:
         return Path(__file__).resolve().parent / 'modules'
 
-    def discover_modules(self) -> List[str]:
-        """Discover available accessibility modules"""
+    def discover_modules(self) -> Dict[str, str]:
+        """Discover accessibility modules: short name -> file stem.
+
+        A module's CLI name comes from its class, not its filename, so
+        ADHDModule in modules/ADHD_accessibility.py is '--modules adhd'.
+        Contributors are free to name the file whatever describes it best.
+        """
+        self._module_classes: Dict[str, type] = {}
+        discovered: Dict[str, str] = {}
+
         if not self.modules_dir.exists():
-            return []
+            return discovered
 
-        return sorted(path.stem for path in self.modules_dir.glob('*_module.py'))
+        for path in sorted(self.modules_dir.glob('*.py')):
+            if path.name.startswith('__'):
+                continue
 
-    def resolve_module_name(self, module_name: str) -> Optional[str]:
-        """Accept both 'adhd' and 'adhd_module' as ways to name a module"""
-        if module_name in self.available_modules:
-            return module_name
+            module_class = self._load_module_class(path)
+            if module_class is None:
+                continue
 
-        suffixed = f"{module_name}_module"
-        if suffixed in self.available_modules:
-            return suffixed
+            name = module_class.__name__
+            short_name = (name[:-len('Module')] if name.endswith('Module') else name).lower()
 
-        return None
+            discovered[short_name] = path.stem
+            # Reachable by short name or by filename stem.
+            self._module_classes[short_name] = module_class
+            self._module_classes[path.stem] = module_class
 
-    def load_module(self, module_name: str) -> Optional[AccessibilityModule]:
-        """Load a specific accessibility module"""
-        resolved = self.resolve_module_name(module_name)
-        if resolved is None:
-            print(f"Unknown module: {module_name}")
-            return None
+        return discovered
 
-        if resolved in self.loaded_modules:
-            return self.loaded_modules[resolved]
-
+    def _load_module_class(self, path: Path) -> Optional[type]:
+        """Import one module file and return its AccessibilityModule subclass"""
         # Load by file path so modules work no matter which directory the
         # translator is invoked from.
         spec = importlib.util.spec_from_file_location(
-            f"academic_translator_modules.{resolved}",
-            self.modules_dir / f"{resolved}.py",
+            f"academic_translator_modules.{path.stem}", path
         )
+        if spec is None or spec.loader is None:
+            return None
 
         try:
             module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
             spec.loader.exec_module(module)
         except Exception as exc:
-            print(f"Could not load module {resolved}: {exc}")
+            print(f"Could not load module {path.name}: {exc}")
+            sys.modules.pop(spec.name, None)
             return None
 
         for attr_name in dir(module):
@@ -283,13 +291,23 @@ class AcademicTranslator:
             if (isinstance(attr, type)
                     and issubclass(attr, AccessibilityModule)
                     and attr is not AccessibilityModule):
+                return attr
 
-                instance = attr()
-                self.loaded_modules[resolved] = instance
-                return instance
-
-        print(f"No AccessibilityModule subclass found in {resolved}")
         return None
+
+    def load_module(self, module_name: str) -> Optional[AccessibilityModule]:
+        """Load a module by short name ('adhd') or file stem"""
+        if module_name in self.loaded_modules:
+            return self.loaded_modules[module_name]
+
+        module_class = self._module_classes.get(module_name)
+        if module_class is None:
+            print(f"Unknown module: {module_name}")
+            return None
+
+        instance = module_class()
+        self.loaded_modules[module_name] = instance
+        return instance
 
     # ------------------------------------------------------------------
     # Analysis
@@ -844,10 +862,7 @@ def main():
 
     # Offer whatever modules are actually installed, rather than a hardcoded
     # list that promises modules nobody has written yet.
-    module_choices = sorted(
-        {name for name in translator.available_modules}
-        | {name[:-len('_module')] for name in translator.available_modules}
-    )
+    module_choices = sorted(translator.available_modules)
 
     parser = argparse.ArgumentParser(description='Translate academic papers into accessible formats')
     parser.add_argument('--file', '-f', help='Academic paper file (PDF, DOCX, TXT)')
@@ -867,10 +882,9 @@ def main():
         print("📚 Available Accessibility Modules:")
         if not translator.available_modules:
             print("   (none found in modules/)")
-        for module_name in translator.available_modules:
-            module = translator.load_module(module_name)
+        for short_name in sorted(translator.available_modules):
+            module = translator.load_module(short_name)
             if module:
-                short_name = module_name[:-len('_module')]
                 print(f"   • {short_name}: {module.get_name()} - {module.get_description()}")
         return 0
 

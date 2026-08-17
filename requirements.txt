@@ -10,3 +10,7 @@ PyPDF2>=3.0.0
 
 # Word document extraction
 python-docx>=1.1.0
+
+# Note: beautifulsoup4 and requests were listed here previously, but nothing
+# in the codebase imports them - the original top-level imports were unused.
+# Add them back if a module or web-fetching feature starts needing them.

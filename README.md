@@ -256,9 +256,9 @@ print(saved['html'])
 
 ### Module Template
 
-Save your module as `modules/<name>_module.py` — the `_module.py` suffix is how
-the translator finds it. A file at `modules/autism_module.py` becomes available
-as `--modules autism`.
+Drop any `.py` file into `modules/`. The CLI name comes from your **class**
+name, not the filename: `AutismModule` becomes `--modules autism`, whatever you
+call the file.
 
 ```python
 from academic_translator import AccessibilityModule

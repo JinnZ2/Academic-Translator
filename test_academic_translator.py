@@ -370,18 +370,30 @@ class ModuleTests(unittest.TestCase):
         self.translator = AcademicTranslator()
 
     def test_all_shipped_modules_are_discovered(self):
+        # Short names come from the class (ADHDModule -> adhd), not the file.
         self.assertEqual(
             sorted(self.translator.available_modules),
-            ['adhd_module', 'dyslexia_module', 'visual_module'],
+            ['adhd', 'dyslexia', 'visual'],
         )
 
-    def test_modules_load_by_short_and_full_name(self):
-        for short_name in ('adhd', 'dyslexia', 'visual'):
+    def test_short_names_map_to_their_files(self):
+        self.assertEqual(
+            self.translator.available_modules,
+            {
+                'adhd': 'ADHD_accessibility',
+                'dyslexia': 'dyslexia_accessibility',
+                'visual': 'visual_processing',
+            },
+        )
+
+    def test_modules_load_by_short_name_and_file_stem(self):
+        for short_name, stem in self.translator.available_modules.items():
             with self.subTest(module=short_name):
                 by_short = self.translator.load_module(short_name)
-                by_full = self.translator.load_module(f"{short_name}_module")
+                by_stem = self.translator.load_module(stem)
                 self.assertIsInstance(by_short, AccessibilityModule)
-                self.assertIs(by_short, by_full)
+                self.assertIsInstance(by_stem, AccessibilityModule)
+                self.assertIs(type(by_short), type(by_stem))
                 self.assertTrue(by_short.get_name())
                 self.assertTrue(by_short.get_description())
 
