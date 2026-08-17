@@ -77,20 +77,32 @@ open academic_translations/medical_research_translation.html
 
 Run `python academic_translator.py --list-modules` to see what is installed.
 
-### ✅ Shipped today
+### ✅ Shipped
+
+**Learning differences**
 
 - **`adhd`** - Chunked text, progress indicators, TL;DR summaries, brain breaks
+- **`autism`** - Idioms replaced with their literal meaning, logical connections
+  spelled out, vague quantities and hedging flagged, fixed predictable structure
 - **`dyslexia`** - Shorter sentences, simpler vocabulary, phonetic guides, extra spacing
 - **`visual`** - Converts text to ASCII diagrams, flowcharts, and visual metaphors
 
-### 🚧 Wanted - not written yet
+**Reading levels and language**
 
-These are open for contribution. See **Building Custom Modules** below.
+- **`beginner`** - Long words swapped for short ones *keeping tense and number*
+  (“utilized” → “used”), sentences split only where the halves stand alone,
+  glossary of the hard words it kept, reading level reported before and after
+- **`esl`** - Phrasal verbs glossed inline, false-friend warnings, Latin/Greek
+  roots decoded, US institutions explained, imperial units converted to metric
+- **`audio`** - Abbreviations and statistical notation spoken properly
+  (“et al.” → “and colleagues”, “p < .001” → “p is less than 0 point 0 0 1”),
+  inline citations stripped, spoken signposts and listening time
 
-- **`autism`** - Clear structure, explicit connections, literal language
-- **`beginner`** - Elementary vocabulary, simple sentences
-- **`esl`** - Cultural context, idiom explanations, cognate identification
-- **`audio`** - Text-to-speech optimization, podcast-style summaries
+Every module can be combined with any other:
+
+```bash
+python academic_translator.py --file study.pdf --modules autism beginner esl
+```
 
 ### 🎯 Subject areas (built in, no module needed)
 
@@ -290,12 +302,19 @@ python academic_translator.py --list-modules
 
 ### Module Ideas Needed
 
-- **🎮 Gaming Module** - Gamified learning elements
+- **🤟 Sign Language Module** - Gloss ordering and visual-first structure
 - **🎵 Music Module** - Rhythm and melody learning aids
 - **🤝 Social Module** - Group discussion prompts
 - **📱 Mobile Module** - Thumb-friendly micro-learning
-- **🧓 Senior Module** - Age-appropriate explanations
+- **🧓 Senior Module** - Larger type, familiar reference points
 - **👶 Parent Module** - Family-relevant applications
+- **🌐 Translation Module** - Output in languages other than English
+
+**The most useful contribution is not a new module — it is telling us where an
+existing one gets it wrong.** The `autism` module's idiom list, the `esl`
+module's false friends, and the `beginner` module's word swaps are all
+hand-written and incomplete by definition. If a paper you actually needed to
+read defeated one of them, that is the bug report we want.
 
 ## 📊 How It Works
 
