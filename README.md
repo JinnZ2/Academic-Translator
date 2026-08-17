@@ -4,7 +4,7 @@
 
 Transform academic papers, research studies, and technical documents into formats that work for different learning styles, reading levels, and cognitive differences. No more brilliant discoveries locked behind impenetrable jargon.
 
-![Python Version](https://img.shields.io/badge/python-3.7+-blue.svg)
+![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Accessibility](https://img.shields.io/badge/accessibility-focused-brightgreen.svg)
 ![Modular](https://img.shields.io/badge/modular-architecture-orange.svg)
@@ -54,42 +54,53 @@ This tool:
 
 ```bash
 # Install
-git clone https://github.com/yourusername/academic-translator.git
-cd academic-translator
-pip install -r requirements.txt
+git clone https://github.com/JinnZ2/Academic-Translator.git
+cd Academic-Translator
 
-# Translate a research paper
+# Translate a plain-text paper - no dependencies needed
+python academic_translator.py --file research_paper.txt
+
+# For PDF and Word files, install the readers first
+pip install -r requirements.txt
 python academic_translator.py --file research_paper.pdf
 
 # Apply accessibility modules
 python academic_translator.py --file study.pdf --modules adhd visual dyslexia
 
 # Get beautiful accessible report
-open academic_translations/research_paper.html
+open academic_translations/medical_research_translation.html
 ```
 
 ## 🧩 Accessibility Modules
 
-**Mix and match modules for your specific needs:**
+**Mix and match modules for your specific needs.**
 
-### 🧠 Learning Differences
+Run `python academic_translator.py --list-modules` to see what is installed.
 
-- **`adhd`** - Chunked text, progress indicators, key highlights
-- **`dyslexia`** - Simplified fonts, shorter sentences, phonetic guides
+### ✅ Shipped today
+
+- **`adhd`** - Chunked text, progress indicators, TL;DR summaries, brain breaks
+- **`dyslexia`** - Shorter sentences, simpler vocabulary, phonetic guides, extra spacing
+- **`visual`** - Converts text to ASCII diagrams, flowcharts, and visual metaphors
+
+### 🚧 Wanted - not written yet
+
+These are open for contribution. See **Building Custom Modules** below.
+
 - **`autism`** - Clear structure, explicit connections, literal language
-- **`visual`** - Converts text to diagrams, flowcharts, infographics
-
-### 📚 Reading Levels
-
 - **`beginner`** - Elementary vocabulary, simple sentences
 - **`esl`** - Cultural context, idiom explanations, cognate identification
 - **`audio`** - Text-to-speech optimization, podcast-style summaries
 
-### 🎯 Subject-Specific
+### 🎯 Subject areas (built in, no module needed)
+
+Subject area is detected automatically and tunes the glossary, the “why this
+matters” notes, and the questions generated. Override it with `--subject`.
 
 - **`medical`** - Patient-focused translations, “ask your doctor” prompts
 - **`education`** - Teacher/parent applications, classroom implementation
 - **`psychology`** - Real-world behavior applications, therapy connections
+- **`social_science`**, **`science`** - Field-specific jargon glossaries
 
 ## 🔬 Supported Research Areas
 
@@ -124,18 +135,31 @@ open academic_translations/research_paper.html
 ## 🛠 Installation
 
 ```bash
-git clone https://github.com/yourusername/academic-translator.git
-cd academic-translator
-pip install -r requirements.txt
+git clone https://github.com/JinnZ2/Academic-Translator.git
+cd Academic-Translator
+pip install -r requirements.txt   # optional - see below
 ```
 
 **Requirements:**
 
-- Python 3.7+
-- PyPDF2/PyMuPDF (PDF processing)
-- BeautifulSoup4 (web content)
-- python-docx (Word documents)
-- Requests (API calls)
+- Python 3.8+ — that is all you need for `.txt` files and the Python API
+
+Everything in `requirements.txt` is optional, installed only for the document
+formats you want to read:
+
+- PyMuPDF and/or PyPDF2 — PDF files (PyMuPDF is tried first, PyPDF2 is the fallback)
+- python-docx — Word `.docx` files
+
+If a reader is missing, the tool tells you which package to install instead of
+crashing.
+
+### 🧪 Running the tests
+
+```bash
+python test_academic_translator.py
+```
+
+No test dependencies — it uses `unittest` from the standard library.
 
 ## 📖 Usage Examples
 
@@ -156,6 +180,12 @@ python academic_translator.py --list-modules
 
 # Custom output name
 python academic_translator.py --file "study.pdf" --output "my_study_explained"
+
+# Choose where reports are written (default: academic_translations/)
+python academic_translator.py --file "study.pdf" --output-dir ~/Documents/translations
+
+# Translate text directly, no file needed
+python academic_translator.py --text "Participants receiving the intervention..."
 ```
 
 ### Python API
@@ -174,10 +204,20 @@ result = translator.translate_academic_document(
     modules=['adhd', 'visual', 'dyslexia']
 )
 
+# Force a subject area instead of detecting it
+result = translator.translate_academic_document(research_text, subject_area='medical')
+
 # Access results
 print(f"Key findings: {result.key_findings}")
 print(f"Why this matters: {result.why_this_matters}")
 print(f"Questions to ask: {result.questions_to_ask}")
+
+# Look up a single term across every field's glossary
+print(translator.explain_term('ANOVA'))   # 'test to compare averages between groups'
+
+# Save the HTML + JSON report
+saved = translator.save_translation(result, "my_study")
+print(saved['html'])
 ```
 
 ## 🎯 Perfect For
@@ -216,6 +256,10 @@ print(f"Questions to ask: {result.questions_to_ask}")
 
 ### Module Template
 
+Drop any `.py` file into `modules/`. The CLI name comes from your **class**
+name, not the filename: `AutismModule` becomes `--modules autism`, whatever you
+call the file.
+
 ```python
 from academic_translator import AccessibilityModule
 
@@ -233,6 +277,15 @@ class YourCustomModule(AccessibilityModule):
     def get_additional_elements(self, text: str, context: dict) -> dict:
         # Return visual aids, action items, etc.
         return {"visual_elements": [], "action_items": []}
+```
+
+`context` carries `subject_area`, `reading_level`, and `key_findings`, so your
+module can adapt to what kind of paper it is looking at.
+
+Check that it loads:
+
+```bash
+python academic_translator.py --list-modules
 ```
 
 ### Module Ideas Needed
@@ -255,10 +308,47 @@ class YourCustomModule(AccessibilityModule):
 
 ### 2. **Jargon Translation**
 
-- **200+ academic terms** translated by field
-- Context-aware replacements preserve meaning
+- **80+ academic terms** translated by field (and growing — PRs welcome)
 - Statistical terms simplified (“p<0.05” → “almost certainly not due to chance”)
 - Methodology explanations (“double-blind” → “neither participants nor researchers knew who got real treatment”)
+
+Matching is **inflection-aware** and **sense-aware**, because exact string
+matching fails in both directions (see `term_matching.py`):
+
+| Written in the paper | Naive matching | What we do |
+| --- | --- | --- |
+| “three **hypotheses**” | missed — glossary says *hypothesis* | “three educated **guesses** about what would happen (hypotheses)” |
+| “**n=240**” | missed — glossary says `n =` | “number of people/things studied: 240” |
+| “**randomised**” | missed — British spelling | matched |
+| “scores **correlated** with…” | “scores *things that tend to happen together* with…” | “scores correlated (things that tend to happen together) with…” |
+| “we **construct** a model” | “we *concept being measured* a model” | left alone — it’s a verb here |
+| “erected **scaffolding**” | “erected *support that’s gradually removed as students learn*” | left alone — wrong sense |
+
+Three mechanisms do this:
+
+1. **Inflection** — each term expands into its plural, irregular plural
+   (*analysis → analyses*), and spelling variants. When a plural matches, the
+   plain-English expansion is pluralized to agree, verb included:
+   *“study that combines”* → *“studies that combine”*.
+2. **Vector-space sense matching** — ambiguous terms carry two cue-word
+   vectors, one per sense. The words around each occurrence become a vector
+   too, and the term expands only when the context sits closer to the academic
+   sense by cosine similarity. Terms marked `strict` (*power*, *mean*,
+   *range*) need positive evidence before they expand at all.
+3. **Grammar guard** — a term declared a noun is skipped where local grammar
+   says it’s a verb (“to construct”, “we construct”).
+
+Words that aren’t ambiguous skip the gate entirely, so the common case stays
+fast and predictable.
+
+**Adding your own:** put spelling variants in `TERM_VARIANTS`, different word
+classes (verbs, adjectives) in `TERM_DERIVED` — those are glossed in place
+rather than substituted, so they can’t break the sentence — and ambiguous
+words in `AMBIGUOUS_TERMS` with cue words for each sense.
+
+The statistics glossary (*mean*, *median*, *regression*, *ANOVA*) is off by
+default since those words are the most context-dependent of all. Enable it
+with `translate_academic_jargon(text, subject, include_statistics=True)`.
 
 ### 3. **Content Extraction**
 
@@ -315,11 +405,22 @@ class YourCustomModule(AccessibilityModule):
 Know confusing academic jargon? Add translations:
 
 ```python
-# In academic_translator.py, add to academic_jargon:
+# In academic_translator.py, add to load_academic_jargon():
 'your_field': {
     'confusing_term': 'plain English explanation',
 }
 ```
+
+Write the explanation as a **noun phrase** — it gets substituted into the
+sentence, so “study following a group over time” works where “following a
+group over time” reads badly after “two”.
+
+Plurals and spelling variants are handled automatically. If your term is also
+an everyday English word, add it to `AMBIGUOUS_TERMS` in `term_matching.py`
+with cue words for each sense, so it only expands where it means the
+technical thing.
+
+Then run `python test_academic_translator.py` to check nothing broke.
 
 ### Create Accessibility Modules
 

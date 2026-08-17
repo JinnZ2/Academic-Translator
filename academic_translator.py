@@ -8,19 +8,43 @@ that work for different learning styles, reading levels, and cognitive differenc
 Modular architecture allows community contributions for specific accessibility needs.
 """
 
-import requests
-from bs4 import BeautifulSoup
-import re
+import argparse
+import html
+import importlib.util
 import json
-from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional, Tuple, Union
-import time
-from pathlib import Path
-import importlib
+import re
+import sys
 from abc import ABC, abstractmethod
-import PyPDF2
-import fitz  # PyMuPDF for better PDF extraction
-from docx import Document
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from term_matching import TermMatcher
+
+# Running this file as a script would normally make it "__main__", so a module
+# doing `from academic_translator import AccessibilityModule` would import a
+# *second* copy of this file and get a different AccessibilityModule class -
+# breaking every issubclass() check in load_module(). Aliasing keeps one copy.
+if __name__ == "__main__" and "academic_translator" not in sys.modules:
+    sys.modules["academic_translator"] = sys.modules["__main__"]
+
+# Document readers are optional: plain text works with no third-party packages
+# at all, and you should not need a PDF library installed to translate a .txt.
+try:
+    import fitz  # PyMuPDF - best text extraction for academic layouts
+except ImportError:
+    fitz = None
+
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+
+try:
+    from docx import Document
+except ImportError:
+    Document = None
+
 
 @dataclass
 class AcademicTranslationResult:
@@ -35,8 +59,9 @@ class AcademicTranslationResult:
     confidence_score: float
     subject_area: str
     reading_level: str
-    modules_applied: List[str]
-    source_file: str
+    modules_applied: List[str] = field(default_factory=list)
+    source_file: str = "Direct input"
+
 
 class AccessibilityModule(ABC):
     """Base class for all accessibility modules"""
@@ -44,22 +69,19 @@ class AccessibilityModule(ABC):
     @abstractmethod
     def get_name(self) -> str:
         """Return module name"""
-        pass
 
     @abstractmethod
     def get_description(self) -> str:
         """Return module description"""
-        pass
 
     @abstractmethod
     def process_text(self, text: str, context: Dict) -> str:
         """Process text according to module's accessibility needs"""
-        pass
 
     @abstractmethod
     def get_additional_elements(self, text: str, context: Dict) -> Dict[str, List[str]]:
         """Return additional elements this module provides"""
-        pass
+
 
 class AcademicTranslator:
     def __init__(self):
@@ -68,6 +90,7 @@ class AcademicTranslator:
         self.methodology_keywords = self.load_methodology_keywords()
         self.loaded_modules = {}
         self.available_modules = self.discover_modules()
+        self._matchers: Dict[tuple, TermMatcher] = {}
 
     def load_academic_jargon(self) -> Dict[str, Dict[str, str]]:
         """Academic jargon translation dictionary organized by field"""
@@ -82,27 +105,27 @@ class AcademicTranslator:
                 'experimental group': 'group that got the treatment being tested',
                 'placebo': 'fake treatment with no active ingredient',
                 'double-blind': 'neither participants nor researchers knew who got real treatment',
-                'randomized': 'people were randomly assigned to groups',
+                'randomized': 'randomly assigned',
                 'correlation': 'things that tend to happen together (doesn\'t prove cause)',
                 'causation': 'one thing actually causes another',
                 'statistical significance': 'result is probably not due to chance',
                 'p-value': 'probability the result happened by accident',
                 'confidence interval': 'range where the true answer probably lies',
                 'peer review': 'other experts checked this research before publication',
-                'replication': 'repeating the study to see if results hold up',
+                'replication': 'repeat of a study to see if the results hold up',
                 'meta-analysis': 'study that combines results from multiple studies',
             },
             'medical': {
                 'clinical trial': 'research study testing treatments on people',
                 'randomized controlled trial': 'gold standard study where people are randomly assigned treatments',
-                'cohort study': 'following a group of people over time',
-                'case-control study': 'comparing people with a condition to those without',
+                'cohort study': 'study following a group of people over time',
+                'case-control study': 'study comparing people with a condition to those without',
                 'systematic review': 'comprehensive summary of all research on a topic',
                 'efficacy': 'how well treatment works in ideal conditions',
                 'effectiveness': 'how well treatment works in real-world conditions',
                 'adverse events': 'bad side effects',
                 'contraindication': 'reason not to use this treatment',
-                'comorbidity': 'having multiple health conditions at once',
+                'comorbidity': 'multiple health conditions at once',
                 'prevalence': 'how common a condition is',
                 'incidence': 'how many new cases occur in a time period',
                 'mortality': 'death rate',
@@ -125,8 +148,8 @@ class AcademicTranslator:
             },
             'education': {
                 'pedagogical': 'related to teaching methods',
-                'scaffolding': 'providing support that\'s gradually removed as students learn',
-                'differentiation': 'adapting teaching for different student needs',
+                'scaffolding': 'support that\'s gradually removed as students learn',
+                'differentiation': 'teaching adapted for different student needs',
                 'formative assessment': 'checking understanding during learning',
                 'summative assessment': 'final test of what was learned',
                 'metacognition': 'thinking about thinking - awareness of your own learning',
@@ -135,12 +158,12 @@ class AcademicTranslator:
                 'extrinsic motivation': 'motivation from external rewards',
             },
             'social_science': {
-                'qualitative research': 'studying experiences, meanings, and perspectives',
-                'quantitative research': 'studying numbers and statistics',
-                'ethnography': 'studying culture by observing and participating',
-                'phenomenology': 'studying people\'s lived experiences',
+                'qualitative research': 'research into experiences, meanings, and perspectives',
+                'quantitative research': 'research using numbers and statistics',
+                'ethnography': 'study of culture by observing and participating',
+                'phenomenology': 'study of people\'s lived experiences',
                 'grounded theory': 'developing theory from data rather than testing existing theory',
-                'triangulation': 'using multiple methods to confirm findings',
+                'triangulation': 'use of multiple methods to confirm findings',
                 'thick description': 'rich, detailed account of what was observed',
                 'reflexivity': 'researcher reflecting on how they might bias the study',
             },
@@ -205,59 +228,90 @@ class AcademicTranslator:
             'sd =': 'standard deviation (how spread out the data is):',
         }
 
+    # ------------------------------------------------------------------
+    # Accessibility modules
+    # ------------------------------------------------------------------
+
+    @property
+    def modules_dir(self) -> Path:
+        return Path(__file__).resolve().parent / 'modules'
+
     def discover_modules(self) -> Dict[str, str]:
-        """Discover available accessibility modules and return short_name -> module_stem mapping"""
-        modules = {}
-        modules_dir = Path(__file__).parent / 'modules'
+        """Discover accessibility modules: short name -> file stem.
 
-        if modules_dir.exists():
-            for file in modules_dir.glob('*.py'):
-                if file.name.startswith('__'):
-                    continue
-                stem = file.stem
-                try:
-                    mod = importlib.import_module(f"modules.{stem}")
-                    for attr_name in dir(mod):
-                        attr = getattr(mod, attr_name)
-                        if (isinstance(attr, type) and
-                            issubclass(attr, AccessibilityModule) and
-                            attr != AccessibilityModule):
-                            # Derive short name: ADHDModule -> adhd, DyslexiaModule -> dyslexia, VisualModule -> visual
-                            short_name = attr_name.replace('Module', '').lower()
-                            modules[short_name] = stem
-                            break
-                except Exception:
-                    continue
+        A module's CLI name comes from its class, not its filename, so
+        ADHDModule in modules/ADHD_accessibility.py is '--modules adhd'.
+        Contributors are free to name the file whatever describes it best.
+        """
+        self._module_classes: Dict[str, type] = {}
+        discovered: Dict[str, str] = {}
 
-        return modules
+        if not self.modules_dir.exists():
+            return discovered
+
+        for path in sorted(self.modules_dir.glob('*.py')):
+            if path.name.startswith('__'):
+                continue
+
+            module_class = self._load_module_class(path)
+            if module_class is None:
+                continue
+
+            name = module_class.__name__
+            short_name = (name[:-len('Module')] if name.endswith('Module') else name).lower()
+
+            discovered[short_name] = path.stem
+            # Reachable by short name or by filename stem.
+            self._module_classes[short_name] = module_class
+            self._module_classes[path.stem] = module_class
+
+        return discovered
+
+    def _load_module_class(self, path: Path) -> Optional[type]:
+        """Import one module file and return its AccessibilityModule subclass"""
+        # Load by file path so modules work no matter which directory the
+        # translator is invoked from.
+        spec = importlib.util.spec_from_file_location(
+            f"academic_translator_modules.{path.stem}", path
+        )
+        if spec is None or spec.loader is None:
+            return None
+
+        try:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+        except Exception as exc:
+            print(f"Could not load module {path.name}: {exc}")
+            sys.modules.pop(spec.name, None)
+            return None
+
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (isinstance(attr, type)
+                    and issubclass(attr, AccessibilityModule)
+                    and attr is not AccessibilityModule):
+                return attr
+
+        return None
 
     def load_module(self, module_name: str) -> Optional[AccessibilityModule]:
-        """Load a specific accessibility module by short name or module stem"""
+        """Load a module by short name ('adhd') or file stem"""
         if module_name in self.loaded_modules:
             return self.loaded_modules[module_name]
 
-        # Resolve short name (e.g. 'adhd') to module stem (e.g. 'ADHD_accessibility')
-        module_stem = self.available_modules.get(module_name, module_name)
+        module_class = self._module_classes.get(module_name)
+        if module_class is None:
+            print(f"Unknown module: {module_name}")
+            return None
 
-        try:
-            module_path = f"modules.{module_stem}"
-            module = importlib.import_module(module_path)
+        instance = module_class()
+        self.loaded_modules[module_name] = instance
+        return instance
 
-            # Find the module class (should end with 'Module')
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and
-                    issubclass(attr, AccessibilityModule) and
-                    attr != AccessibilityModule):
-
-                    instance = attr()
-                    self.loaded_modules[module_name] = instance
-                    return instance
-
-        except ImportError as e:
-            print(f"Could not load module {module_name}: {e}")
-
-        return None
+    # ------------------------------------------------------------------
+    # Analysis
+    # ------------------------------------------------------------------
 
     def detect_subject_area(self, text: str) -> str:
         """Identify the academic subject area"""
@@ -283,23 +337,29 @@ class AcademicTranslator:
 
             scores[subject] = score
 
-        return max(scores, key=scores.get) if scores else 'general'
+        best = max(scores, key=scores.get) if scores else 'general'
+
+        # Nothing matched at all - don't claim a subject we didn't detect.
+        return best if scores.get(best, 0) > 0 else 'general'
 
     def extract_text_from_file(self, file_path: str) -> str:
         """Extract text from various academic document formats"""
         file_path = Path(file_path)
 
-        if file_path.suffix.lower() == '.pdf':
+        if not file_path.exists():
+            raise FileNotFoundError(f"No such file: {file_path}")
+
+        suffix = file_path.suffix.lower()
+
+        if suffix == '.pdf':
             return self.extract_text_from_pdf(str(file_path))
-        elif file_path.suffix.lower() in ['.docx', '.doc']:
+        elif suffix in ['.docx', '.doc']:
             return self.extract_text_from_docx(str(file_path))
-        elif file_path.suffix.lower() in ['.txt', '.text']:
+        elif suffix in ['.txt', '.text', '.md']:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                return file_path.read_text(encoding='utf-8')
             except UnicodeDecodeError:
-                with open(file_path, 'r', encoding='latin-1') as f:
-                    return f.read()
+                return file_path.read_text(encoding='latin-1')
         else:
             raise ValueError(f"Unsupported file type: {file_path.suffix}")
 
@@ -307,67 +367,98 @@ class AcademicTranslator:
         """Extract text from PDF - academic papers often have complex layouts"""
         text = ""
 
-        try:
-            # Try PyMuPDF first (better for academic papers)
-            doc = fitz.open(file_path)
-            for page in doc:
-                text += page.get_text()
-            doc.close()
+        if fitz is None and PyPDF2 is None:
+            raise ImportError(
+                "Reading PDFs needs PyMuPDF or PyPDF2. Install with: "
+                "pip install -r requirements.txt"
+            )
 
-            if len(text.strip()) > 100:
-                return text
+        if fitz is not None:
+            try:
+                # Try PyMuPDF first (better for academic papers)
+                doc = fitz.open(file_path)
+                for page in doc:
+                    text += page.get_text()
+                doc.close()
 
-        except Exception as e:
-            print(f"PyMuPDF failed: {e}, trying PyPDF2...")
+                if len(text.strip()) > 100:
+                    return text
 
-        try:
-            # Fallback to PyPDF2
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page in pdf_reader.pages:
-                    text += page.extract_text()
+            except Exception as e:
+                print(f"PyMuPDF failed: {e}, trying PyPDF2...")
 
-        except Exception as e:
-            print(f"PyPDF2 also failed: {e}")
-            return ""
+        if PyPDF2 is not None:
+            try:
+                # Fallback to PyPDF2
+                with open(file_path, 'rb') as file:
+                    pdf_reader = PyPDF2.PdfReader(file)
+                    for page in pdf_reader.pages:
+                        text += page.extract_text() or ""
+
+            except Exception as e:
+                print(f"PyPDF2 also failed: {e}")
+                return ""
 
         return text
 
     def extract_text_from_docx(self, file_path: str) -> str:
         """Extract text from Word documents"""
+        if Document is None:
+            raise ImportError(
+                "Reading Word documents needs python-docx. Install with: "
+                "pip install -r requirements.txt"
+            )
+
         try:
             doc = Document(file_path)
-            text = ""
-            for paragraph in doc.paragraphs:
-                text += paragraph.text + "\n"
-            return text
+            return "\n".join(paragraph.text for paragraph in doc.paragraphs)
         except Exception as e:
             print(f"Error reading Word document: {e}")
             return ""
 
-    def translate_academic_jargon(self, text: str, subject_area: str) -> str:
-        """Replace academic jargon with plain English"""
-        translated = text
+    def get_matcher(self, subject_area: str, include_statistics: bool = False) -> TermMatcher:
+        """Build (and cache) the term matcher for one subject area"""
+        cache_key = (subject_area, include_statistics)
+        if cache_key in self._matchers:
+            return self._matchers[cache_key]
 
-        # Apply general research terms
-        for jargon, plain in self.academic_jargon['general_research'].items():
-            pattern = r'\b' + re.escape(jargon) + r'\b'
-            replacement = f"{plain} ({jargon})"
-            translated = re.sub(pattern, replacement, translated, flags=re.IGNORECASE)
-
-        # Apply subject-specific terms
+        glossary = {}
+        glossary.update(self.academic_jargon['general_research'])
+        if include_statistics:
+            glossary.update(self.academic_jargon['statistics'])
         if subject_area in self.academic_jargon:
-            for jargon, plain in self.academic_jargon[subject_area].items():
-                pattern = r'\b' + re.escape(jargon) + r'\b'
-                replacement = f"{plain} ({jargon})"
-                translated = re.sub(pattern, replacement, translated, flags=re.IGNORECASE)
+            glossary.update(self.academic_jargon[subject_area])
 
-        # Apply statistical/methodology terms
-        for jargon, plain in self.methodology_keywords.items():
-            pattern = re.escape(jargon)
-            translated = re.sub(pattern, plain, translated, flags=re.IGNORECASE)
+        matcher = TermMatcher(glossary, shorthand=self.methodology_keywords)
+        self._matchers[cache_key] = matcher
+        return matcher
 
-        return translated
+    def translate_academic_jargon(self, text: str, subject_area: str,
+                                  include_statistics: bool = False) -> str:
+        """Replace academic jargon with plain English.
+
+        Matching is inflection-aware (so 'hypotheses' and 'clinical trials'
+        are caught, not just the exact glossary spelling) and sense-aware
+        (so 'we construct a model' and 'political power' are left alone).
+        See term_matching.py.
+
+        Set include_statistics to also expand the statistics glossary. It is
+        off by default because those terms - 'mean', 'power', 'range' - are
+        the most context-dependent in the book; they are gated, but the gate
+        is a heuristic.
+        """
+        return self.get_matcher(subject_area, include_statistics).translate(text)
+
+    def explain_term(self, term: str) -> Optional[str]:
+        """Look up a single academic term across every field's glossary"""
+        needle = term.strip().lower()
+
+        for field_terms in self.academic_jargon.values():
+            for jargon, plain in field_terms.items():
+                if jargon.lower() == needle:
+                    return plain
+
+        return None
 
     def extract_key_findings(self, text: str, subject_area: str) -> List[str]:
         """Extract the main research findings"""
@@ -390,7 +481,7 @@ class AcademicTranslator:
         # Look for statistically significant results
         sig_patterns = [
             r'(p\s*[<>=]\s*0\.0[0-5][^.]*)',
-            r'(significant[ly]?\s+[^.]*)',
+            r'(significant(?:ly)?\s+[^.]*)',
             r'([^.]*significant\s+(?:difference|effect|relationship)[^.]*)'
         ]
 
@@ -400,7 +491,7 @@ class AcademicTranslator:
                 result = match.group(1).strip()
                 findings.append(f"📊 {result}")
 
-        return findings[:8]  # Limit to most important
+        return self._dedupe(findings)[:8]  # Limit to most important
 
     def extract_methodology_simplified(self, text: str, subject_area: str) -> List[str]:
         """Simplify the research methods section"""
@@ -433,7 +524,7 @@ class AcademicTranslator:
                 sample_info = match.group(1).strip()
                 methods.append(f"👥 {sample_info}")
 
-        return methods[:6]
+        return self._dedupe(methods)[:6]
 
     def generate_why_this_matters(self, text: str, subject_area: str) -> List[str]:
         """Generate "why this matters" explanations"""
@@ -476,7 +567,7 @@ class AcademicTranslator:
                 if len(implication) > 20:
                     matters.append(f"🎯 {implication}")
 
-        return matters[:6]
+        return self._dedupe(matters)[:6]
 
     def generate_questions_to_ask(self, text: str, subject_area: str) -> List[str]:
         """Generate questions people should ask professionals"""
@@ -503,16 +594,17 @@ class AcademicTranslator:
             ])
 
         # Look for limitations mentioned in the study
-        limitations = re.findall(r'limitation[s]?\s+(?:of this study\s+)?(?:include|are)[:\s]([^.]*)', text, re.IGNORECASE)
-        for limitation in limitations:
-            questions.append(f"❓ Ask experts: 'How do the study limitations affect the conclusions?'")
+        if re.search(r'limitation[s]?\s+(?:of this study\s+)?(?:include|are)[:\s]', text, re.IGNORECASE):
+            questions.append(
+                "❓ Ask experts: 'How do the study limitations affect the conclusions?'"
+            )
 
-        return questions[:6]
+        return self._dedupe(questions)[:6]
 
     def calculate_reading_level(self, text: str) -> str:
         """Estimate reading level of the text"""
         # Simple reading level estimation based on sentence length and word complexity
-        sentences = re.split(r'[.!?]+', text)
+        sentences = [s for s in re.split(r'[.!?]+', text) if s.strip()]
         words = text.split()
 
         if not sentences or not words:
@@ -521,12 +613,9 @@ class AcademicTranslator:
         avg_sentence_length = len(words) / len(sentences)
 
         # Count complex words (3+ syllables, rough estimate)
-        complex_words = 0
-        for word in words[:1000]:  # Sample first 1000 words
-            if len(word) > 6:  # Rough proxy for syllable count
-                complex_words += 1
-
-        complex_ratio = complex_words / min(len(words), 1000)
+        sample = words[:1000]
+        complex_words = sum(1 for word in sample if len(word) > 6)
+        complex_ratio = complex_words / len(sample)
 
         # Very rough reading level estimation
         if avg_sentence_length < 15 and complex_ratio < 0.1:
@@ -538,12 +627,27 @@ class AcademicTranslator:
         else:
             return "Graduate/Professional"
 
+    @staticmethod
+    def _dedupe(items: List[str]) -> List[str]:
+        """Drop repeats while keeping the original order"""
+        seen = set()
+        unique = []
+
+        for item in items:
+            key = item.lower()
+            if key not in seen:
+                seen.add(key)
+                unique.append(item)
+
+        return unique
+
     def translate_academic_document(self, text: str, modules: List[str] = None,
-                                  source_file: str = None) -> AcademicTranslationResult:
+                                    source_file: str = None,
+                                    subject_area: str = None) -> AcademicTranslationResult:
         """Main translation function with modular accessibility support"""
 
-        # Detect subject area
-        subject_area = self.detect_subject_area(text)
+        # Detect subject area (unless the caller told us what it is)
+        subject_area = subject_area or self.detect_subject_area(text)
         reading_level = self.calculate_reading_level(text)
 
         # Apply core translation
@@ -559,26 +663,27 @@ class AcademicTranslator:
         applied_modules = []
         additional_elements = {'visual_elements': [], 'action_items': []}
 
-        if modules:
-            for module_name in modules:
-                module = self.load_module(module_name)
-                if module:
-                    context = {
-                        'subject_area': subject_area,
-                        'reading_level': reading_level,
-                        'key_findings': key_findings
-                    }
+        for module_name in modules or []:
+            module = self.load_module(module_name)
+            if not module:
+                continue
 
-                    # Apply module transformations
-                    plain_text = module.process_text(plain_text, context)
+            context = {
+                'subject_area': subject_area,
+                'reading_level': reading_level,
+                'key_findings': key_findings
+            }
 
-                    # Get additional elements
-                    module_elements = module.get_additional_elements(text, context)
-                    for key, values in module_elements.items():
-                        if key in additional_elements:
-                            additional_elements[key].extend(values)
+            # Apply module transformations
+            plain_text = module.process_text(plain_text, context)
 
-                    applied_modules.append(module.get_name())
+            # Get additional elements
+            module_elements = module.get_additional_elements(text, context)
+            for key, values in module_elements.items():
+                if key in additional_elements:
+                    additional_elements[key].extend(values)
+
+            applied_modules.append(module.get_name())
 
         confidence = self.calculate_confidence(text, subject_area, applied_modules)
 
@@ -623,169 +728,185 @@ class AcademicTranslator:
 
         return max(0.3, min(0.95, base_score))
 
-    def save_translation(self, result: AcademicTranslationResult, filename: str):
+    # ------------------------------------------------------------------
+    # Output
+    # ------------------------------------------------------------------
+
+    def save_translation(self, result: AcademicTranslationResult, filename: str,
+                         output_dir: str = "academic_translations") -> Dict[str, Path]:
         """Save translation results"""
-        Path("academic_translations").mkdir(exist_ok=True)
+        directory = Path(output_dir)
+        directory.mkdir(parents=True, exist_ok=True)
 
-        # Save JSON
-        with open(f"academic_translations/{filename}.json", 'w') as f:
-            json.dump(asdict(result), f, indent=2)
+        json_path = directory / f"{filename}.json"
+        html_path = directory / f"{filename}.html"
 
-        # Save HTML report
-        html_report = self.generate_html_report(result)
-        with open(f"academic_translations/{filename}.html", 'w') as f:
-            f.write(html_report)
+        json_path.write_text(
+            json.dumps(asdict(result), indent=2, ensure_ascii=False),
+            encoding='utf-8',
+        )
+        html_path.write_text(self.generate_html_report(result), encoding='utf-8')
+
+        return {'json': json_path, 'html': html_path}
 
     def generate_html_report(self, result: AcademicTranslationResult) -> str:
         """Generate comprehensive HTML report"""
-        html = f"""
 
-        <!DOCTYPE html>
+        def list_items(items: List[str]) -> str:
+            return "".join(f"<li>{html.escape(item)}</li>" for item in items)
 
-        <html>
-        <head>
-        <title>Academic Translation: {result.subject_area.title()}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; line-height: 1.6; }}
-            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; }}
-            .subject {{ font-size: 28px; font-weight: bold; }}
-            .reading-level {{ font-size: 16px; opacity: 0.9; margin-top: 10px; }}
-            .modules {{ font-size: 14px; margin-top: 15px; }}
-            .section {{ margin: 25px 0; padding: 20px; border-left: 5px solid #667eea; background: #f8faff; border-radius: 5px; }}
-            .findings {{ border-left-color: #4CAF50; background: #f8fff8; }}
-            .methodology {{ border-left-color: #FF9800; background: #fff8f0; }}
-            .matters {{ border-left-color: #E91E63; background: #fdf8fb; }}
-            .questions {{ border-left-color: #9C27B0; background: #faf8ff; }}
-            .confidence {{ text-align: center; font-size: 20px; margin: 30px 0; padding: 15px; background: #e3f2fd; border-radius: 8px; }}
-            ul {{ padding-left: 20px; }}
-            li {{ margin: 10px 0; }}
-            .key-point {{ font-weight: bold; color: #1976D2; }}
-            h2 {{ color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
-            .visual-note {{ background: #fff3e0; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ff9800; }}
-        </style>
-        </head>
-        <body>
-        <div class="header">
-            <div class="subject">📚 {result.subject_area.title()} Research Translation</div>
-            <div class="reading-level">📖 Original Reading Level: {result.reading_level}</div>
-            <div class="modules">🔧 Accessibility Modules Applied: {', '.join(result.modules_applied) if result.modules_applied else 'None'}</div>
-        </div>
+        def optional_section(title: str, items: List[str]) -> str:
+            if not items:
+                return ""
+            return f"""
+    <div class="section">
+        <h2>{title}</h2>
+        <ul>
+        {list_items(items)}
+        </ul>
+    </div>"""
 
-        <div class="confidence">
+        paragraphs = "".join(
+            f'<p style="text-align: justify; line-height: 1.8;">{html.escape(para)}</p>'
+            for para in result.plain_english.split("\n") if para.strip()
+        )
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Academic Translation: {html.escape(result.subject_area.title())}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; line-height: 1.6; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; }}
+        .subject {{ font-size: 28px; font-weight: bold; }}
+        .reading-level {{ font-size: 16px; opacity: 0.9; margin-top: 10px; }}
+        .modules {{ font-size: 14px; margin-top: 15px; }}
+        .section {{ margin: 25px 0; padding: 20px; border-left: 5px solid #667eea; background: #f8faff; border-radius: 5px; }}
+        .findings {{ border-left-color: #4CAF50; background: #f8fff8; }}
+        .methodology {{ border-left-color: #FF9800; background: #fff8f0; }}
+        .matters {{ border-left-color: #E91E63; background: #fdf8fb; }}
+        .questions {{ border-left-color: #9C27B0; background: #faf8ff; }}
+        .confidence {{ text-align: center; font-size: 20px; margin: 30px 0; padding: 15px; background: #e3f2fd; border-radius: 8px; }}
+        ul {{ padding-left: 20px; }}
+        li {{ margin: 10px 0; }}
+        .key-point {{ font-weight: bold; color: #1976D2; }}
+        h2 {{ color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
+        .visual-note {{ background: #fff3e0; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ff9800; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="subject">📚 {html.escape(result.subject_area.title())} Research Translation</div>
+        <div class="reading-level">📖 Original Reading Level: {html.escape(result.reading_level)}</div>
+        <div class="modules">🔧 Accessibility Modules Applied: {html.escape(', '.join(result.modules_applied)) if result.modules_applied else 'None'}</div>
+    </div>
+
+    <div class="confidence">
         <strong>🎯 Translation Confidence: {result.confidence_score:.0%}</strong>
-        </div>
+    </div>
 
-        <div class="section findings">
+    <div class="section findings">
         <h2>🔍 Key Findings (What They Discovered)</h2>
         <ul>
-        {"".join(f"<li>{finding}</li>" for finding in result.key_findings)}
+        {list_items(result.key_findings)}
         </ul>
-        </div>
+    </div>
 
-        <div class="section matters">
+    <div class="section matters">
         <h2>🎯 Why This Matters (Real-World Impact)</h2>
         <ul>
-        {"".join(f"<li>{matter}</li>" for matter in result.why_this_matters)}
+        {list_items(result.why_this_matters)}
         </ul>
-        </div>
+    </div>
 
-        <div class="section methodology">
+    <div class="section methodology">
         <h2>⚙️ How They Did It (Methods Simplified)</h2>
         <ul>
-        {"".join(f"<li>{method}</li>" for method in result.methodology_simplified)}
+        {list_items(result.methodology_simplified)}
         </ul>
-        </div>
+    </div>
 
-        <div class="section questions">
+    <div class="section questions">
         <h2>❓ Questions to Ask Professionals</h2>
         <ul>
-        {"".join(f"<li>{question}</li>" for question in result.questions_to_ask)}
+        {list_items(result.questions_to_ask)}
         </ul>
-        </div>
+    </div>
+{optional_section("🎬 Visual Elements", result.visual_elements)}
+{optional_section("📋 Action Items", result.action_items)}
 
-        {f'''
-        <div class="section">
-        <h2>🎬 Visual Elements</h2>
-        <ul>
-        {"".join(f"<li>{element}</li>" for element in result.visual_elements)}
-        </ul>
-        </div>
-        ''' if result.visual_elements else ''}
-
-        {f'''
-        <div class="section">
-        <h2>📋 Action Items</h2>
-        <ul>
-        {"".join(f"<li>{action}</li>" for action in result.action_items)}
-        </ul>
-        </div>
-        ''' if result.action_items else ''}
-
-        <div class="section">
+    <div class="section">
         <h2>📖 Full Translation</h2>
         <div class="visual-note">
             <strong>💡 Reading Tip:</strong> Technical terms are explained in parentheses. Look for colored highlights if you're using accessibility modules.
         </div>
-        <p style="text-align: justify; line-height: 1.8;">
-        {result.plain_english.replace(chr(10), '</p><p style="text-align: justify; line-height: 1.8;">')}
-        </p>
-        </div>
+        {paragraphs}
+    </div>
 
-        <hr style="margin: 40px 0;">
-        <div style="text-align: center; color: #666; font-size: 14px;">
+    <hr style="margin: 40px 0;">
+    <div style="text-align: center; color: #666; font-size: 14px;">
         <p><strong>Academic Translator</strong> - Making knowledge accessible to all minds</p>
-        <p>Source: {result.source_file}</p>
+        <p>Source: {html.escape(result.source_file)}</p>
         <p><em>This translation provides information, not professional advice. Always consult experts for important decisions.</em></p>
-        </div>
+    </div>
+</body>
+</html>
+"""
 
-        </body>
-        </html>
-        """
-        return html
 
 def main():
     """Command line interface for academic translation"""
-    import argparse
+    translator = AcademicTranslator()
+
+    # Offer whatever modules are actually installed, rather than a hardcoded
+    # list that promises modules nobody has written yet.
+    module_choices = sorted(translator.available_modules)
 
     parser = argparse.ArgumentParser(description='Translate academic papers into accessible formats')
     parser.add_argument('--file', '-f', help='Academic paper file (PDF, DOCX, TXT)')
     parser.add_argument('--text', '-t', help='Direct text input')
-    parser.add_argument('--modules', '-m', nargs='*', help='Accessibility modules to apply')
+    parser.add_argument('--modules', '-m', nargs='*', default=[],
+                        help='Accessibility modules to apply', choices=module_choices)
     parser.add_argument('--subject', '-s', help='Subject area override',
-                       choices=['medical', 'psychology', 'education', 'social_science', 'science'])
+                        choices=['medical', 'psychology', 'education', 'social_science', 'science'])
     parser.add_argument('--output', '-o', help='Output filename')
+    parser.add_argument('--output-dir', default='academic_translations',
+                        help='Directory for saved reports (default: academic_translations)')
     parser.add_argument('--list-modules', action='store_true', help='List available modules')
 
     args = parser.parse_args()
 
-    translator = AcademicTranslator()
-
     if args.list_modules:
         print("📚 Available Accessibility Modules:")
-        for short_name in translator.available_modules:
+        if not translator.available_modules:
+            print("   (none found in modules/)")
+        for short_name in sorted(translator.available_modules):
             module = translator.load_module(short_name)
             if module:
                 print(f"   • {short_name}: {module.get_name()} - {module.get_description()}")
-        return
+        return 0
 
     # Get text input
-    text = ""
-    source_file = ""
-
     if args.file:
         print(f"📄 Reading academic document: {args.file}")
-        text = translator.extract_text_from_file(args.file)
+        try:
+            text = translator.extract_text_from_file(args.file)
+        except (FileNotFoundError, ValueError, ImportError) as exc:
+            print(f"❌ {exc}")
+            return 1
         source_file = args.file
     elif args.text:
         text = args.text
         source_file = "Direct input"
     else:
         print("❌ Please provide --file or --text")
-        return
+        return 1
 
     if not text or len(text.strip()) < 200:
         print("❌ Not enough text to translate (need at least 200 characters)")
-        return
+        return 1
 
     print(f"🧠 Analyzing academic content ({len(text):,} characters)...")
 
@@ -798,7 +919,8 @@ def main():
     result = translator.translate_academic_document(
         text,
         modules=modules,
-        source_file=source_file
+        source_file=source_file,
+        subject_area=args.subject,
     )
 
     # Show results
@@ -825,13 +947,15 @@ def main():
     output_name = args.output or f"{result.subject_area}_research_translation"
     output_name = re.sub(r'[^a-zA-Z0-9_]', '_', output_name)
 
-    translator.save_translation(result, output_name)
-    print(f"\n💾 Full translation saved: academic_translations/{output_name}.html")
+    saved = translator.save_translation(result, output_name, args.output_dir)
+    print(f"\n💾 Full translation saved: {saved['html']}")
 
-    if modules:
+    if result.modules_applied:
         print(f"🔧 Modules applied: {', '.join(result.modules_applied)}")
 
     print(f"\n✨ This research is now accessible to {result.reading_level.lower()} readers!")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

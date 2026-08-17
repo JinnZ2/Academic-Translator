@@ -1,5 +1,16 @@
-PyPDF2
-PyMuPDF
-beautifulsoup4
-python-docx
-requests
+# Academic Translator dependencies
+#
+# Everything here is OPTIONAL. Translating plain text (.txt) and using the
+# Python API needs nothing but the standard library - install these only for
+# the document formats you actually want to read.
+
+# PDF extraction (PyMuPDF is tried first, PyPDF2 is the fallback)
+PyMuPDF>=1.23.0
+PyPDF2>=3.0.0
+
+# Word document extraction
+python-docx>=1.1.0
+
+# Note: beautifulsoup4 and requests were listed here previously, but nothing
+# in the codebase imports them - the original top-level imports were unused.
+# Add them back if a module or web-fetching feature starts needing them.

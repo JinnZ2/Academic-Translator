@@ -4,23 +4,25 @@
 
 Academic Translator is a Python tool that converts complex academic research papers into plain-English explanations tailored to different audiences and learning styles. It supports PDF, DOCX, and TXT inputs and generates accessible HTML reports.
 
-**Language:** Python 3.7+
+**Language:** Python 3.8+
 **License:** MIT
 
 ## Repository Structure
 
 ```
 Academic-Translator/
-├── academic_translator.py       # Main application (~820 lines)
+├── academic_translator.py       # Main application
 │                                # - AcademicTranslationResult dataclass
 │                                # - AccessibilityModule ABC
-│                                # - AcademicTranslator class (20 methods)
+│                                # - AcademicTranslator class
 │                                # - CLI entry point (main function)
+├── term_matching.py            # Inflection + word-sense matching for the glossary
+├── test_academic_translator.py # Test suite (stdlib unittest, no dependencies)
 ├── modules/                    # Pluggable accessibility modules
 │   ├── ADHD_accessibility.py   # Chunks text, progress indicators, brain breaks
 │   ├── dyslexia_accessibility.py # Simplified vocabulary, pronunciation guides
 │   └── visual_processing.py   # ASCII diagrams, flowcharts, visual metaphors
-├── requirements.txt            # Python dependencies
+├── requirements.txt            # Optional per-format document readers
 ├── .gitignore                  # Git ignore rules
 ├── README.md                   # Project documentation
 └── LICENSE                     # MIT License
@@ -40,7 +42,7 @@ Academic-Translator/
 3. **`AcademicTranslator`** — Main class handling:
    - Subject area detection (medical, psychology, education, social science)
    - File text extraction (PDF/DOCX/TXT)
-   - Jargon translation (200+ terms across multiple fields)
+   - Jargon translation (~84 terms across multiple fields, see `term_matching.py`)
    - Key findings extraction
    - Methodology simplification
    - Reading level estimation
@@ -55,15 +57,24 @@ Modules are discovered at runtime from the `modules/` directory via `importlib`.
 - Be a `.py` file in `modules/`
 - Name its class `<Name>Module` (e.g. `ADHDModule`) — the CLI short name is derived by stripping `Module` and lowercasing (e.g. `adhd`)
 
+Modules are imported by file path rather than by package name, so the tool
+works from any working directory. `discover_modules()` returns a
+`{short_name: file_stem}` mapping; `load_module()` accepts either.
+
 ## Dependencies
 
-- **PyPDF2** — PDF processing
-- **PyMuPDF (fitz)** — Enhanced PDF extraction
-- **BeautifulSoup4** — Web content parsing
+**None are required.** Plain text (`.txt`) and the Python API run on the
+standard library alone. The readers below are imported lazily and only needed
+for their format; a missing one reports which package to install.
+
+- **PyMuPDF (fitz)** — PDF extraction (tried first)
+- **PyPDF2** — PDF extraction fallback
 - **python-docx** — Word document handling
-- **requests** — HTTP calls
 
 Install with: `pip install -r requirements.txt`
+
+BeautifulSoup4 and requests were listed previously but nothing imports them —
+the original top-level imports were unused and have been removed.
 
 ## Running the Application
 
@@ -91,7 +102,13 @@ Output HTML reports are saved to the `academic_translations/` directory.
 
 ## Testing
 
-No formal test suite exists. There are no test files, no pytest/unittest configuration, and no CI/CD pipeline. Testing is done manually.
+```bash
+python test_academic_translator.py     # or: python -m unittest discover
+```
+
+52 tests covering translation, inflection and word-sense matching, module
+discovery and loading, and report generation. Standard library only — no test
+dependencies. Each module also has a runnable demo: `python modules/<file>.py`.
 
 ## Code Conventions
 
@@ -102,16 +119,26 @@ No formal test suite exists. There are no test files, no pytest/unittest configu
 - **f-strings** for string formatting
 - **Regex-based** text processing (no ML models)
 - All translation logic is rule-based pattern matching
+- Glossary expansions are written as **noun phrases**, since they get
+  substituted into the sentence
 
 ## Known Issues
 
 - No `pyproject.toml` for modern Python packaging
-- No formal test suite or CI/CD pipeline
+- No CI/CD pipeline (the test suite runs locally)
+- Word-sense disambiguation uses hand-written cue vectors, not learned
+  embeddings; adding a term that is also everyday English means adding its
+  cues to `AMBIGUOUS_TERMS` by hand
+- The `statistics` glossary is off by default (`include_statistics=True` to
+  enable) because those terms are the most context-dependent
 
 ## Development Notes
 
 - The project has no build system — it runs directly as a Python script
 - No external API integrations; all processing is local and rule-based
 - Reading level calculation is a rough heuristic based on word/sentence length
+- Jargon matching is inflection-aware (plurals, irregulars, British spellings)
+  and sense-aware (cosine similarity between the context window and per-sense
+  cue vectors); see the module docstring in `term_matching.py`
 - Confidence scoring: base 70% + 10% for recognized subject + 10% for research elements + 10% for methodology found
 - HTML output uses inline CSS with gradient headers and color-coded sections

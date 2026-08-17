@@ -15,8 +15,17 @@ Created with input from the dyslexia community.
 """
 
 import re
-from typing import Dict, List, Tuple
-from academic_translator import AccessibilityModule
+from typing import Dict, List
+
+try:
+    from academic_translator import AccessibilityModule
+except ImportError:  # running this file directly, e.g. python modules/adhd_module.py
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from academic_translator import AccessibilityModule
+
 
 class DyslexiaModule(AccessibilityModule):
     def __init__(self):
@@ -88,21 +97,19 @@ class DyslexiaModule(AccessibilityModule):
     def create_dyslexia_header(self) -> str:
         """Create header with dyslexia-friendly formatting info"""
         return """
+📖 **DYSLEXIA-FRIENDLY FORMAT**
 
-        📖 **DYSLEXIA-FRIENDLY FORMAT**
+This text has been formatted to be easier to read:
+• Short sentences (15 words or less)
+• Simple vocabulary
+• Pronunciation guides for hard words
+• Extra spacing between lines
+• Clear paragraph breaks
 
-        This text has been formatted to be easier to read:
-        • Short sentences (15 words or less)
-        • Simple vocabulary
-        • Pronunciation guides for hard words
-        • Extra spacing between lines
-        • Clear paragraph breaks
+💡 **Reading tip:** Take your time and read at your own pace!
 
-        💡 **Reading tip:** Take your time and read at your own pace!
-
-        -----
-
-        """.strip()
+-----
+""".strip()
 
     def simplify_vocabulary(self, text: str) -> str:
         """Replace difficult words with simpler alternatives"""
@@ -146,9 +153,9 @@ class DyslexiaModule(AccessibilityModule):
             current_sentence.append(word)
 
             # Break at conjunctions if we're getting long
-            if (len(current_sentence) >= 12 and
-                word.lower() in breaking_points and
-                i < len(words) - 3):  # Don't break too close to end
+            if (len(current_sentence) >= 12
+                    and word.lower() in breaking_points
+                    and i < len(words) - 3):  # Don't break too close to end
 
                 sentences.append(' '.join(current_sentence) + '.')
                 current_sentence = []
@@ -223,30 +230,29 @@ class DyslexiaModule(AccessibilityModule):
     def create_reading_tips(self) -> str:
         """Provide dyslexia-specific reading tips"""
         return """
+-----
 
-        -----
+💡 **DYSLEXIA READING TIPS**
 
-        💡 **DYSLEXIA READING TIPS**
+✅ **If words look jumbled:**
+• Try covering text below the line you're reading
+• Use a ruler or piece of paper as a guide
 
-        ✅ **If words look jumbled:**
-        • Try covering text below the line you're reading
-        • Use a ruler or piece of paper as a guide
+✅ **If you lose your place:**
+• Take breaks between paragraphs
+• Re-read the last sentence before continuing
 
-        ✅ **If you lose your place:**
-        • Take breaks between paragraphs
-        • Re-read the last sentence before continuing
+✅ **If pronunciation is hard:**
+• Sound out the syllables shown in parentheses
+• Say difficult words out loud
 
-        ✅ **If pronunciation is hard:**
-        • Sound out the syllables shown in parentheses
-        • Say difficult words out loud
+✅ **Remember:**
+• Your brain processes information differently - that's a strength!
+• Take as much time as you need
+• Understanding is more important than speed
 
-        ✅ **Remember:**
-        • Your brain processes information differently - that's a strength!
-        • Take as much time as you need
-        • Understanding is more important than speed
-
-        🌟 **You've got this! Dyslexic minds often see patterns others miss.**
-    """.strip()
+🌟 **You've got this! Dyslexic minds often see patterns others miss.**
+""".strip()
 
     def get_additional_elements(self, text: str, context: Dict) -> Dict[str, List[str]]:
         """Provide dyslexia-specific additional elements"""
@@ -292,18 +298,18 @@ class DyslexiaModule(AccessibilityModule):
             'action_items': action_items
         }
 
-        # Example usage and testing
 
+# Example usage and testing
 if __name__ == "__main__":
     sample_text = """
-    The longitudinal investigation demonstrated that participants who received
-    the comprehensive intervention subsequently exhibited statistically significant
-    improvements in cognitive performance measures. Furthermore, the data analysis
-    revealed that approximately seventy-five percent of individuals who utilized
-    the methodology showed enhanced working memory capabilities compared to the
-    control group. Nevertheless, researchers acknowledge that additional studies
-    are necessary to facilitate broader implementation of these findings.
-    """
+The longitudinal investigation demonstrated that participants who received
+the comprehensive intervention subsequently exhibited statistically significant
+improvements in cognitive performance measures. Furthermore, the data analysis
+revealed that approximately seventy-five percent of individuals who utilized
+the methodology showed enhanced working memory capabilities compared to the
+control group. Nevertheless, researchers acknowledge that additional studies
+are necessary to facilitate broader implementation of these findings.
+"""
 
     module = DyslexiaModule()
     context = {'subject_area': 'psychology', 'reading_level': 'Graduate'}

@@ -14,18 +14,27 @@ Perfect for visual learners who think in pictures.
 """
 
 import re
-from typing import Dict, List, Tuple
-from academic_translator import AccessibilityModule
+from typing import Dict, List
+
+try:
+    from academic_translator import AccessibilityModule
+except ImportError:  # running this file directly, e.g. python modules/adhd_module.py
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from academic_translator import AccessibilityModule
+
 
 class VisualModule(AccessibilityModule):
     def __init__(self):
         self.visual_indicators = {
-        'process': ['method', 'procedure', 'steps', 'process', 'protocol', 'workflow'],
-        'comparison': ['versus', 'compared to', 'difference', 'contrast', 'better than'],
-        'relationship': ['correlation', 'relationship', 'connected', 'associated', 'linked'],
-        'change': ['increased', 'decreased', 'improved', 'reduced', 'changed', 'effect'],
-        'structure': ['components', 'parts', 'elements', 'structure', 'framework'],
-        'timeline': ['before', 'after', 'during', 'weeks', 'months', 'timeline', 'follow-up']
+            'process': ['method', 'procedure', 'steps', 'process', 'protocol', 'workflow'],
+            'comparison': ['versus', 'compared to', 'difference', 'contrast', 'better than'],
+            'relationship': ['correlation', 'relationship', 'connected', 'associated', 'linked'],
+            'change': ['increased', 'decreased', 'improved', 'reduced', 'changed', 'effect'],
+            'structure': ['components', 'parts', 'elements', 'structure', 'framework'],
+            'timeline': ['before', 'after', 'during', 'weeks', 'months', 'timeline', 'follow-up']
         }
 
         self.chart_symbols = {
@@ -88,7 +97,6 @@ class VisualModule(AccessibilityModule):
     def create_visual_header(self, context: Dict) -> str:
         """Create visual overview of the research"""
         subject_area = context.get('subject_area', 'research')
-        reading_level = context.get('reading_level', 'unknown')
 
         # Subject-specific icons
         subject_icons = {
@@ -102,17 +110,16 @@ class VisualModule(AccessibilityModule):
         icons = subject_icons.get(subject_area, '📖🔍💡')
 
         header = f"""
-
-        ┌─────────────────────────────────────────────────────────┐
-        │  🎨 VISUAL RESEARCH OVERVIEW                            │
-        │                                                         │
-        │  📊 Subject: {subject_area.title()} {icons}                     │
-        │  🎯 Visual Format: Diagrams + Charts + Metaphors       │
-        │  👁️ Optimized for: Visual learners & processors        │
-        │                                                         │
-        │  📖 Look for: 📈Charts 🔄Flowcharts 🏗️Structures       │
-        └─────────────────────────────────────────────────────────┘
-    """
+┌─────────────────────────────────────────────────────────┐
+│  🎨 VISUAL RESEARCH OVERVIEW                            │
+│                                                         │
+│  📊 Subject: {subject_area.title()} {icons}
+│  🎯 Visual Format: Diagrams + Charts + Metaphors        │
+│  👁️ Optimized for: Visual learners & processors         │
+│                                                         │
+│  📖 Look for: 📈Charts 🔄Flowcharts 🏗️Structures        │
+└─────────────────────────────────────────────────────────┘
+"""
         return header.strip()
 
     def add_visual_indicators(self, text: str) -> str:
@@ -174,26 +181,22 @@ class VisualModule(AccessibilityModule):
         if len(steps) < 2:
             return ""
 
-        diagram = """
+        return """
+🔄 **RESEARCH PROCESS FLOWCHART**
 
-        🔄 **RESEARCH PROCESS FLOWCHART**
-
-        START
-          │
-          ▼
-        ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-        │   Step 1    │───▶│   Step 2    │───▶│   Step 3    │
-        │ Participants│    │ Intervention│    │  Measure    │
-        │  Selected   │    │  Applied    │    │  Results    │
-        └─────────────┘    └─────────────┘    └─────────────┘
-          │                   │                   │
-          ▼                   ▼                   ▼
-     Select people     Apply treatment      Check if it
-     for the study      or intervention       worked
-
-        """
-
-        return diagram.strip()
+    START
+      │
+      ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Step 1    │───▶│   Step 2    │───▶│   Step 3    │
+│ Participants│    │ Intervention│    │  Measure    │
+│  Selected   │    │  Applied    │    │  Results    │
+└─────────────┘    └─────────────┘    └─────────────┘
+      │                   │                   │
+      ▼                   ▼                   ▼
+ Select people     Apply treatment      Check if it
+ for the study      or intervention       worked
+""".strip()
 
     def create_comparison_chart(self, text: str) -> str:
         """Create a before/after or group comparison chart"""
@@ -201,101 +204,86 @@ class VisualModule(AccessibilityModule):
         numbers = re.findall(r'(\d+\.?\d*)\s*(?:%|percent|points?)', text)
 
         if len(numbers) >= 2:
-            diagram = f"""
+            return f"""
+⚖️ **COMPARISON VISUALIZATION**
 
-        ⚖️ **COMPARISON VISUALIZATION**
+BEFORE vs AFTER (or Group A vs Group B)
 
-        BEFORE vs AFTER (or Group A vs Group B)
+Before/Control Group    │    After/Treatment Group
+                        │
+    😐 Baseline         │        😊 Improved
+     {numbers[0]}%                │         {numbers[1]}%
+                        │
+    ████████░░          │        ███████████
+    (Lower scores)      │        (Higher scores)
+                        │
+Results show significant improvement! 📈
+""".strip()
 
-        Before/Control Group    │    After/Treatment Group
-                           │
-        😐 Baseline        │        😊 Improved
-         {numbers[0] if numbers else 'X'}%               │         {numbers[1] if len(numbers) > 1 else 'Y'}%
-                           │
-        ████████░░         │        ███████████
-        (Lower scores)     │        (Higher scores)
-                           │
-        Results show significant improvement! 📈
+        return """
+⚖️ **GROUP COMPARISON**
 
-            """
-        else:
-            diagram = """
+   Control Group          Treatment Group
+        │                        │
+   😐 No change           😊 Improvement seen
+        │                        │
+   ████████░░░           ████████████
+   (Stayed same)         (Got better)
 
-        ⚖️ **GROUP COMPARISON**
-
-       Control Group          Treatment Group
-            │                        │
-       😐 No change           😊 Improvement seen
-            │                        │
-       ████████░░░           ████████████
-       (Stayed same)         (Got better)
-
-        The treatment group showed better results! ⭐
-
-            """
-
-        return diagram.strip()
+The treatment group showed better results! ⭐
+""".strip()
 
     def create_relationship_diagram(self, text: str) -> str:
         """Create a diagram showing relationships between variables"""
-        diagram = """
+        return """
+🔗 **RELATIONSHIP MAP**
 
-        🔗 **RELATIONSHIP MAP**
+    Factor A                 Factor B
+       │                       │
+       │    📈 Positive        │
+       │   Relationship        │
+       │                       │
+       └───────────────────────┘
+              ↕️
+    When A increases,
+    B also increases
 
-        Factor A                 Factor B
-           │                       │
-           │    📈 Positive        │
-           │   Relationship        │
-           │                       │
-           └───────────────────────┘
-                  ↕️
-        When A increases,
-        B also increases
-
-        💡 Remember: Correlation ≠ Causation
-        (Things can be related without one causing the other)
-
-        """
-        return diagram.strip()
+    💡 Remember: Correlation ≠ Causation
+    (Things can be related without one causing the other)
+""".strip()
 
     def create_timeline_diagram(self, text: str) -> str:
         """Create a timeline of the research or intervention"""
-        # Look for time periods
-        time_periods = re.findall(r'(\d+)\s*(days?|weeks?|months?|years?)', text, re.IGNORECASE)
+        return """
+📅 **RESEARCH TIMELINE**
 
-        diagram = """
-
-        📅 **RESEARCH TIMELINE**
-
-        Week 1         Week 6         Week 12        Follow-up
-      │              │               │              │
-      ▼              ▼               ▼              ▼
-        ┌─────┐       ┌─────┐        ┌─────┐       ┌─────┐
-        │Start│──────▶│Check│───────▶│ End │──────▶│Check│
-        │Study│       │Progress│      │Study│       │Later│
-        └─────┘       └─────┘        └─────┘       └─────┘
-       📝             📊            📈            🔄
-        Baseline      Mid-point      Final         Long-term
-        measures      assessment     results       effects
-
-        """
-        return diagram.strip()
+Week 1         Week 6         Week 12        Follow-up
+  │              │               │              │
+  ▼              ▼               ▼              ▼
+┌─────┐       ┌────────┐     ┌─────┐       ┌─────┐
+│Start│──────▶│Check   │────▶│ End │──────▶│Check│
+│Study│       │Progress│     │Study│       │Later│
+└─────┘       └────────┘     └─────┘       └─────┘
+   📝             📊            📈            🔄
+Baseline      Mid-point      Final         Long-term
+measures      assessment     results       effects
+""".strip()
 
     def add_visual_metaphors(self, text: str, subject_area: str) -> str:
         """Add visual metaphors to explain complex concepts"""
         metaphors = {
             'medical': {
-                'statistical significance': '🎯 Like hitting a bullseye - the result is so clear it\'s almost impossible it happened by chance',
+                'statistical significance': "🎯 Like hitting a bullseye - the result is so clear it's almost impossible it happened by chance",
                 'placebo effect': '🍭 Like thinking candy medicine will help - your mind can sometimes create real effects from fake treatments',
                 'double-blind study': '👓🕶️ Like both patient and doctor wearing blindfolds - nobody knows who gets real treatment until the end'
             },
             'psychology': {
-                'cognitive load': '🧠💾 Like your brain\'s RAM - too much information at once and it starts slowing down',
-                'correlation': '🌧️☂️ Like rain and umbrellas - they appear together but rain doesn\'t cause umbrellas',
+                'cognitive load': "🧠💾 Like your brain's RAM - too much information at once and it starts slowing down",
+                'correlation': "🌧️☂️ Like rain and umbrellas - they appear together but rain doesn't cause umbrellas",
                 'sample size': '🫐 Like judging all blueberries by tasting just a few - bigger sample = better guess about all blueberries'
             },
             'education': {
-                'scaffolding': '🏗️ Like construction scaffolding - temporary support that\'s removed once the building (learning) is strong',
+                'scaffolding': "🏗️ Like construction scaffolding - temporary support that's removed once the building (learning) is strong",
                 'zone of proximal development': '🎯 Like the "just right" level in video games - not too easy, not too hard',
                 'metacognition': '🪞 Like having a mirror for your thinking - being aware of how you learn and think'
             }
@@ -367,19 +355,19 @@ class VisualModule(AccessibilityModule):
             'action_items': action_items
         }
 
-        # Example usage and testing
 
+# Example usage and testing
 if __name__ == "__main__":
     sample_text = """
-    This randomized controlled trial examined the effectiveness of mindfulness-based
-    stress reduction (MBSR) compared to a control group. Participants were randomly
-    assigned to either the 8-week MBSR intervention (n=45) or waitlist control (n=47).
-    The MBSR group showed statistically significant reductions in anxiety scores
-    (p<0.001) and increased mindfulness ratings compared to controls. Correlation
-    analysis revealed a strong negative relationship between mindfulness practice
-    frequency and reported stress levels (r=-0.72). These findings suggest that
-    regular mindfulness practice can effectively reduce anxiety and stress.
-    """
+This randomized controlled trial examined the effectiveness of mindfulness-based
+stress reduction (MBSR) compared to a control group. Participants were randomly
+assigned to either the 8-week MBSR intervention (n=45) or waitlist control (n=47).
+The MBSR group showed statistically significant reductions in anxiety scores
+(p<0.001) and increased mindfulness ratings compared to controls. Correlation
+analysis revealed a strong negative relationship between mindfulness practice
+frequency and reported stress levels (r=-0.72). These findings suggest that
+regular mindfulness practice can effectively reduce anxiety and stress.
+"""
 
     module = VisualModule()
     context = {'subject_area': 'psychology', 'reading_level': 'College'}
