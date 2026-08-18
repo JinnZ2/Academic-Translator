@@ -20,7 +20,11 @@ Academic-Translator/
 ├── test_academic_translator.py # Test suite (stdlib unittest, no dependencies)
 ├── modules/                    # Pluggable accessibility modules
 │   ├── ADHD_accessibility.py   # Chunks text, progress indicators, brain breaks
+│   ├── audio_optimization.py   # TTS: spoken abbreviations, notation, signposts
+│   ├── autism_accessibility.py # Literal language, explicit connections
+│   ├── beginner_reading.py     # Short words and sentences, reading level report
 │   ├── dyslexia_accessibility.py # Simplified vocabulary, pronunciation guides
+│   ├── esl_support.py          # Phrasal verbs, false friends, unit conversion
 │   └── visual_processing.py   # ASCII diagrams, flowcharts, visual metaphors
 ├── requirements.txt            # Optional per-format document readers
 ├── .gitignore                  # Git ignore rules
@@ -106,9 +110,14 @@ Output HTML reports are saved to the `academic_translations/` directory.
 python test_academic_translator.py     # or: python -m unittest discover
 ```
 
-52 tests covering translation, inflection and word-sense matching, module
-discovery and loading, and report generation. Standard library only — no test
-dependencies. Each module also has a runnable demo: `python modules/<file>.py`.
+86 tests covering translation, inflection and word-sense matching, all seven
+accessibility modules, discovery and loading, and report generation. Standard
+library only — no test dependencies. Each module also has a runnable demo:
+`python modules/<file>.py`.
+
+`AllModulesContractTests` runs every discovered module against the same
+checks — usable output, non-empty extras, empty and tiny input, and chaining
+with the other six — so a new module is covered the moment it is added.
 
 ## Code Conventions
 
@@ -121,6 +130,11 @@ dependencies. Each module also has a runnable demo: `python modules/<file>.py`.
 - All translation logic is rule-based pattern matching
 - Glossary expansions are written as **noun phrases**, since they get
   substituted into the sentence
+- Modules that substitute words must preserve grammar: tense, number, and
+  capitalization. `beginner_reading.verb_forms()` generates the four forms of
+  a verb so "utilized" becomes "used" rather than "use"
+- Modules that rewrite for a specific group use that group's own preferred
+  language (e.g. the autism module uses identity-first "autistic readers")
 
 ## Known Issues
 

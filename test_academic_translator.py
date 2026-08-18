@@ -10,11 +10,13 @@ Uses only the standard library, so it runs anywhere Python does:
 
 import html.parser
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 from academic_translator import AcademicTranslator, AccessibilityModule
+from modules.beginner_reading import verb_forms
 from term_matching import (
     SenseProfile,
     TermMatcher,
@@ -369,19 +371,18 @@ class ModuleTests(unittest.TestCase):
     def setUp(self):
         self.translator = AcademicTranslator()
 
-    def test_all_shipped_modules_are_discovered(self):
-        # Short names come from the class (ADHDModule -> adhd), not the file.
-        self.assertEqual(
-            sorted(self.translator.available_modules),
-            ['adhd', 'dyslexia', 'visual'],
-        )
-
     def test_short_names_map_to_their_files(self):
+        # Short names come from the class (ADHDModule -> adhd), not the file,
+        # so filenames are free to describe what the module does.
         self.assertEqual(
             self.translator.available_modules,
             {
                 'adhd': 'ADHD_accessibility',
+                'audio': 'audio_optimization',
+                'autism': 'autism_accessibility',
+                'beginner': 'beginner_reading',
                 'dyslexia': 'dyslexia_accessibility',
+                'esl': 'esl_support',
                 'visual': 'visual_processing',
             },
         )
@@ -431,6 +432,253 @@ class ModuleTests(unittest.TestCase):
         )
         self.assertEqual(result.modules_applied, [])
         self.assertTrue(result.plain_english)
+
+
+class AutismModuleTests(unittest.TestCase):
+    def setUp(self):
+        self.module = AcademicTranslator().load_module('autism')
+        self.context = {'subject_area': 'psychology', 'reading_level': 'College'}
+
+    def test_idioms_become_literal_with_original_kept(self):
+        output = self.module.process_text("This study sheds light on memory.", self.context)
+        self.assertIn('helps explain', output)
+        self.assertIn('[the paper says: "sheds light on"]', output)
+
+    def test_replacement_keeps_sentence_capitalization(self):
+        output = self.module.process_text(
+            "A growing body of evidence supports this.", self.context
+        )
+        self.assertIn('An increasing number of studies', output)
+        self.assertNotIn('an increasing number of studies [', output)
+
+    def test_vague_quantities_are_flagged(self):
+        output = self.module.process_text("We tested several participants.", self.context)
+        self.assertIn('several [VAGUE]', output)
+
+    def test_connectives_are_explained(self):
+        output = self.module.process_text(
+            "The effect was small. However, it was consistent.", self.context
+        )
+        self.assertIn('this contradicts what was just said', output)
+
+    def test_hedges_are_listed_but_text_is_unchanged(self):
+        output = self.module.process_text("Sleep may improve memory.", self.context)
+        self.assertIn('it is possible, but not certain', output)
+        # The hedge itself stays in the sentence.
+        self.assertIn('Sleep may improve', output)
+
+    def test_document_ends_predictably(self):
+        output = self.module.process_text("A plain sentence about results.", self.context)
+        self.assertTrue(output.rstrip().endswith('There is nothing after this line.'))
+
+
+class BeginnerModuleTests(unittest.TestCase):
+    def setUp(self):
+        self.module = AcademicTranslator().load_module('beginner')
+        self.context = {'subject_area': 'medical', 'reading_level': 'Graduate'}
+
+    def test_word_swaps_keep_tense_and_number(self):
+        swapped, _ = self.module.use_shorter_words(
+            "Researchers utilized methods and required more data."
+        )
+        self.assertIn('used', swapped)
+        self.assertIn('needed', swapped)
+        self.assertNotIn('utilized', swapped)
+        # The naive version produced 'use' and 'need' here.
+        self.assertNotIn(' use ', swapped)
+
+    def test_gerunds_are_handled(self):
+        swapped, _ = self.module.use_shorter_words("Prior to implementing the plan")
+        self.assertIn('carrying out', swapped)
+        self.assertIn('Before', swapped)
+
+    def test_phrases_beat_the_words_inside_them(self):
+        swapped, _ = self.module.use_shorter_words("A considerable majority of patients")
+        self.assertIn('Most patients', swapped)
+        self.assertNotIn('large most', swapped)
+
+    def test_long_sentence_splits_when_second_half_stands_alone(self):
+        result = self.module.shorten_sentences(
+            "The researchers looked at the problem for a long time and the "
+            "participants showed a large improvement on every measure."
+        )
+        self.assertGreater(result.count('.'), 1)
+
+    def test_long_sentence_is_left_alone_when_splitting_would_break_it(self):
+        # The second clause shares the first clause's subject, so cutting at
+        # 'and' would leave a fragment with no subject.
+        source = ("The researchers looked at the problem for a long time and "
+                  "later decided that the effect was real.")
+        self.assertEqual(self.module.shorten_sentences(source), source)
+
+    def test_no_sentence_fragments_are_produced(self):
+        output = self.module.process_text(
+            "Researchers utilized a comprehensive methodology to ascertain whether "
+            "the intervention would facilitate improvements, and the participants "
+            "subsequently demonstrated significant enhancement.", self.context
+        )
+        # A fragment shows up as a full stop directly followed by a lowercase word.
+        self.assertIsNone(re.search(r'\.\s+[a-z]', output))
+
+    def test_reading_level_drops(self):
+        source = ("Researchers utilized a comprehensive methodology to ascertain "
+                  "whether the intervention would facilitate substantial improvements.")
+        simplified = self.module.process_text(source, self.context)
+        self.assertLess(
+            self.module.estimate_grade_level(simplified),
+            self.module.estimate_grade_level(source),
+        )
+
+    def test_glossary_lists_kept_words(self):
+        output = self.module.process_text("The treatment reduced symptoms.", self.context)
+        self.assertIn('**treatment**', output)
+        self.assertIn('**symptom**', output)
+
+    def test_verb_forms_are_correct(self):
+        self.assertEqual(verb_forms('utilize'), ('utilizes', 'utilized', 'utilizing'))
+        self.assertEqual(verb_forms('carry out'), ('carries out', 'carried out', 'carrying out'))
+        self.assertEqual(verb_forms('show'), ('shows', 'showed', 'showing'))
+        self.assertEqual(verb_forms('watch'), ('watches', 'watched', 'watching'))
+
+
+class ESLModuleTests(unittest.TestCase):
+    def setUp(self):
+        self.module = AcademicTranslator().load_module('esl')
+        self.context = {'subject_area': 'medical', 'reading_level': 'College'}
+
+    def test_phrasal_verbs_are_glossed(self):
+        output = self.module.process_text("They carried out the study.", self.context)
+        self.assertIn('carried out (= did or performed)', output)
+
+    def test_phrasal_verb_glossed_only_once(self):
+        output = self.module.process_text(
+            "They carried out one study. Then they carried out another.", self.context
+        )
+        self.assertEqual(output.count('(= did or performed)'), 1)
+
+    def test_imperial_units_are_converted(self):
+        output = self.module.process_text("Participants weighed 150 lbs.", self.context)
+        self.assertIn('68.0 kg', output)
+
+    def test_fahrenheit_conversion_is_correct(self):
+        output = self.module.process_text("Temperature was 98.6 degrees Fahrenheit.", self.context)
+        self.assertIn('37.0 °C', output)
+
+    def test_false_friends_are_reported(self):
+        output = self.module.process_text(
+            "Eventually the authors realize the problem.", self.context
+        )
+        self.assertIn('FALSE FRIENDS', output)
+        self.assertIn('eventually', output.lower())
+
+    def test_us_terms_are_explained(self):
+        output = self.module.process_text("Approved by the IRB.", self.context)
+        self.assertIn('Institutional Review Board', output)
+
+    def test_lowercase_act_is_not_mistaken_for_the_exam(self):
+        output = self.module.process_text(
+            "The participants act in their own interest.", self.context
+        )
+        self.assertNotIn('university entrance exam', output)
+
+
+class AudioModuleTests(unittest.TestCase):
+    def setUp(self):
+        self.module = AcademicTranslator().load_module('audio')
+        self.context = {'subject_area': 'medical', 'reading_level': 'Graduate'}
+
+    def test_abbreviations_are_spoken(self):
+        # Checked on the body directly: the spoken intro quotes "et al" when
+        # explaining what it replaced.
+        spoken = self.module.expand_abbreviations("Smith et al. found this, e.g. in adults.")
+        self.assertIn('and colleagues', spoken)
+        self.assertIn('for example', spoken)
+        self.assertNotIn('et al', spoken)
+
+    def test_citations_are_removed(self):
+        text, removed = self.module.remove_citations(
+            "The effect held (Smith, 2019) across trials [12]."
+        )
+        self.assertEqual(removed, 2)
+        self.assertNotIn('Smith', text)
+        self.assertNotIn('[12]', text)
+
+    def test_notation_is_case_sensitive(self):
+        # 'OR' is an odds ratio; 'or' is a conjunction.
+        self.assertIn('odds ratio', self.module.expand_notation("The OR was 2.3"))
+        self.assertNotIn('odds ratio', self.module.expand_notation("one or two"))
+
+    def test_comparison_after_a_letter_is_spoken(self):
+        output = self.module.process_text("The effect was large, p < .001.", self.context)
+        self.assertIn('is less than', output)
+
+    def test_decimals_are_spelled_out(self):
+        output = self.module.process_text("The mean was 8.4 units.", self.context)
+        self.assertIn('8 point 4', output)
+
+    def test_unit_slashes_say_per_not_or(self):
+        spoken = self.module.speak_symbols("levels of 120 mg/dL")
+        self.assertIn('milligrams per deciliter', spoken)
+        self.assertNotIn('mg or dL', spoken)
+
+    def test_articles_agree_after_substitution(self):
+        self.assertIn('an approximately', self.module.fix_articles('a approximately 15'))
+        # Words that break the vowel-letter rule.
+        self.assertIn('a university', self.module.fix_articles('an university'))
+        self.assertIn('an hour', self.module.fix_articles('a hour'))
+
+    def test_listening_time_is_reported(self):
+        output = self.module.process_text("word " * 300, self.context)
+        self.assertIn('minutes to listen to', output)
+
+
+class AllModulesContractTests(unittest.TestCase):
+    """Every shipped module must honour the AccessibilityModule contract"""
+
+    def setUp(self):
+        self.translator = AcademicTranslator()
+
+    def test_seven_modules_ship(self):
+        self.assertEqual(
+            sorted(self.translator.available_modules),
+            ['adhd', 'audio', 'autism', 'beginner', 'dyslexia', 'esl', 'visual'],
+        )
+
+    def test_every_module_returns_usable_output(self):
+        for short_name in self.translator.available_modules:
+            with self.subTest(module=short_name):
+                module = self.translator.load_module(short_name)
+                context = {'subject_area': 'medical', 'reading_level': 'College'}
+
+                output = module.process_text(SAMPLE_PAPER, context)
+                self.assertIsInstance(output, str)
+                self.assertTrue(output.strip())
+
+                extras = module.get_additional_elements(SAMPLE_PAPER, context)
+                self.assertTrue(extras['visual_elements'])
+                self.assertTrue(extras['action_items'])
+                self.assertTrue(module.get_name())
+                self.assertTrue(module.get_description())
+
+    def test_every_module_survives_empty_and_tiny_input(self):
+        for short_name in self.translator.available_modules:
+            for text in ("", "   ", "Short."):
+                with self.subTest(module=short_name, text=repr(text)):
+                    module = self.translator.load_module(short_name)
+                    output = module.process_text(text, {'subject_area': 'general'})
+                    self.assertIsInstance(output, str)
+
+    def test_modules_chain_without_error(self):
+        result = self.translator.translate_academic_document(
+            SAMPLE_PAPER,
+            modules=sorted(self.translator.available_modules),
+        )
+        self.assertEqual(len(result.modules_applied), 7)
+        self.assertTrue(result.plain_english.strip())
+
+    def test_short_names_are_unique(self):
+        names = list(self.translator.available_modules)
+        self.assertEqual(len(names), len(set(names)))
 
 
 class ReportTests(unittest.TestCase):
