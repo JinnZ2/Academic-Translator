@@ -643,8 +643,13 @@ class AcademicTranslator:
 
     def translate_academic_document(self, text: str, modules: List[str] = None,
                                     source_file: str = None,
-                                    subject_area: str = None) -> AcademicTranslationResult:
-        """Main translation function with modular accessibility support"""
+                                    subject_area: str = None,
+                                    headline: str = None) -> AcademicTranslationResult:
+        """Main translation function with modular accessibility support.
+
+        headline is the claim that brought the reader here - a news headline,
+        say - which the scope module checks against what the paper supports.
+        """
 
         # Detect subject area (unless the caller told us what it is)
         subject_area = subject_area or self.detect_subject_area(text)
@@ -671,7 +676,11 @@ class AcademicTranslator:
             context = {
                 'subject_area': subject_area,
                 'reading_level': reading_level,
-                'key_findings': key_findings
+                'key_findings': key_findings,
+                'external_headline': headline,
+                # Modules that quote the paper need its actual words, not the
+                # jargon-expanded version they are handed to transform.
+                'original_text': text,
             }
 
             # Apply module transformations
@@ -871,6 +880,9 @@ def main():
                         help='Accessibility modules to apply', choices=module_choices)
     parser.add_argument('--subject', '-s', help='Subject area override',
                         choices=['medical', 'psychology', 'education', 'social_science', 'science'])
+    parser.add_argument('--headline', help=(
+        'A headline or claim about this paper (e.g. from a news story). '
+        'The scope module checks it against what the study can support.'))
     parser.add_argument('--output', '-o', help='Output filename')
     parser.add_argument('--output-dir', default='academic_translations',
                         help='Directory for saved reports (default: academic_translations)')
@@ -921,6 +933,7 @@ def main():
         modules=modules,
         source_file=source_file,
         subject_area=args.subject,
+        headline=args.headline,
     )
 
     # Show results

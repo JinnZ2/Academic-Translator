@@ -383,6 +383,7 @@ class ModuleTests(unittest.TestCase):
                 'beginner': 'beginner_reading',
                 'dyslexia': 'dyslexia_accessibility',
                 'esl': 'esl_support',
+                'scope': 'scope_check',
                 'visual': 'visual_processing',
             },
         )
@@ -632,16 +633,199 @@ class AudioModuleTests(unittest.TestCase):
         self.assertIn('minutes to listen to', output)
 
 
+OVERCLAIMING_PAPER = """Daily Coffee Consumption Reduces Risk of Long-term Cognitive Decline
+
+Abstract: This cross-sectional study examined coffee consumption and cognitive
+performance in older adults. We surveyed 24 participants at a single clinic.
+Higher self-reported coffee intake was significantly associated with better
+test scores (p < 0.03). These findings suggest coffee may protect against
+long-term cognitive decline.
+
+Methods: A cross-sectional survey was administered to 24 healthy volunteers
+aged 65 to 80 over a 4 week period. Coffee intake was measured by self-report.
+
+Conclusion: Coffee consumption may be beneficial for cognitive health.
+"""
+
+SOUND_PAPER = """Supervised Exercise Lowers HbA1c in Adults with Type 2 Diabetes
+
+Abstract: This randomized controlled trial tested whether supervised exercise
+reduces HbA1c compared with usual care. We enrolled 240 participants (n = 240)
+across three sites over a 52 week period. The intervention group showed a mean
+reduction of 0.7 percentage points (Cohen's d = 0.62, 95% CI 0.4 to 0.9,
+p < 0.001).
+
+Methods: Participants were randomly assigned in this randomized controlled
+trial. Follow-up continued for 52 weeks.
+
+Conclusion: Supervised exercise reduced HbA1c in these participants.
+"""
+
+
+class ScopeModuleTests(unittest.TestCase):
+    """The claim-versus-method checks"""
+
+    def setUp(self):
+        self.module = AcademicTranslator().load_module('scope')
+        self.context = {'subject_area': 'medical', 'reading_level': 'College'}
+
+    def headlines(self, text, context=None):
+        return [f.headline for f in
+                self.module.analyze(text, context or self.context)['findings']]
+
+    # -- the core promise: quiet on sound work, loud on overclaiming --
+
+    def test_sound_paper_raises_no_flags(self):
+        self.assertEqual(self.headlines(SOUND_PAPER), [])
+
+    def test_overclaiming_paper_raises_flags(self):
+        self.assertGreaterEqual(len(self.headlines(OVERCLAIMING_PAPER)), 5)
+
+    # -- design ceiling --
+
+    def test_causal_claim_on_cross_sectional_is_flagged(self):
+        flags = self.headlines(OVERCLAIMING_PAPER)
+        self.assertTrue(any('cross-sectional' in f for f in flags))
+
+    def test_causal_claim_on_rct_is_not_flagged(self):
+        # An RCT can support a causal claim, so 'reduces' is fine here.
+        flags = self.headlines(SOUND_PAPER)
+        self.assertFalse(any('cannot show' in f for f in flags))
+
+    def test_association_wording_is_not_read_as_causal(self):
+        # 'associated with reduced risk' contains 'reduced' but claims no cause.
+        self.assertEqual(
+            self.module.find_causal_language(
+                "Coffee was associated with reduced risk of decline."),
+            [],
+        )
+
+    def test_bare_causal_verb_is_detected(self):
+        self.assertIn('reduces', self.module.find_causal_language("Coffee reduces risk."))
+
+    # -- population --
+
+    def test_animal_study_claiming_human_effect_is_flagged(self):
+        text = ("Compound X Cures Alzheimer's in People\n\nAbstract: We treated "
+                "mice with compound X. n = 40. The mouse study ran 12 weeks.")
+        self.assertTrue(any('mouse' in f.lower() for f in self.headlines(text)))
+
+    def test_animal_study_without_human_claim_is_not_flagged_for_species(self):
+        text = ("Compound X in a Mouse Model\n\nAbstract: We treated mice with "
+                "compound X (n = 40). Cohen's d = 0.5. The mouse study ran 12 weeks.")
+        self.assertFalse(any('mouse study' in f and 'claim is about' in f
+                             for f in self.headlines(text)))
+
+    # -- sample size --
+
+    def test_small_sample_is_flagged(self):
+        self.assertTrue(any('24 participants' in f
+                            for f in self.headlines(OVERCLAIMING_PAPER)))
+
+    def test_large_sample_is_not_flagged(self):
+        self.assertFalse(any('small study' in f for f in self.headlines(SOUND_PAPER)))
+
+    def test_sample_sizes_found_in_either_notation(self):
+        self.assertIn(240, self.module.find_sample_sizes("we enrolled 240 participants"))
+        self.assertIn(240, self.module.find_sample_sizes("(n = 240)"))
+
+    # -- duration --
+
+    def test_long_term_claim_from_short_study_is_flagged(self):
+        self.assertTrue(any('4 week' in f for f in self.headlines(OVERCLAIMING_PAPER)))
+
+    def test_long_study_supports_long_term_claim(self):
+        text = ("Exercise Produces Long-term Benefit\n\nAbstract: A randomized "
+                "controlled trial over a 3 year period, n = 500, Cohen's d = 0.5.")
+        self.assertFalse(any('year' in f and 'cannot' in f for f in self.headlines(text)))
+
+    # -- effect size --
+
+    def test_significance_without_effect_size_is_flagged(self):
+        self.assertTrue(any('effect size' in f
+                            for f in self.headlines(OVERCLAIMING_PAPER)))
+
+    def test_confidence_interval_counts_as_reporting_magnitude(self):
+        self.assertFalse(any('effect size' in f for f in self.headlines(SOUND_PAPER)))
+
+    def test_small_effect_size_is_flagged_as_small(self):
+        text = ("Trial Result\n\nAbstract: A randomized controlled trial, n = 900, "
+                "found a significant difference (Cohen's d = 0.08, p < 0.001) "
+                "over a 60 week period.")
+        self.assertTrue(any('small' in f.lower() for f in self.headlines(text)))
+
+    # -- surrogate outcomes --
+
+    def test_surrogate_flagged_when_claim_is_broader(self):
+        text = ("Drug Prevents Heart Attacks\n\nAbstract: A randomized controlled "
+                "trial, n = 400, measured cholesterol over a 70 week period. "
+                "Cohen's d = 0.4.")
+        self.assertTrue(any('cholesterol' in f for f in self.headlines(text)))
+
+    def test_surrogate_not_flagged_when_claim_names_it(self):
+        # SOUND_PAPER measures HbA1c and its title says HbA1c - that is precise,
+        # not a mismatch.
+        self.assertFalse(any('HbA1c' in f for f in self.headlines(SOUND_PAPER)))
+
+    # -- headline handling --
+
+    def test_external_headline_is_checked_instead_of_the_title(self):
+        context = dict(self.context, external_headline="Coffee prevents dementia, proven")
+        analysis = self.module.analyze(OVERCLAIMING_PAPER, context)
+        self.assertEqual(analysis['claim'], "Coffee prevents dementia, proven")
+        self.assertIn('headline you supplied', analysis['claim_source'])
+
+    def test_hedge_drop_attributes_the_quote_correctly(self):
+        context = dict(self.context, external_headline="Coffee prevents dementia, proven")
+        findings = self.module.analyze(OVERCLAIMING_PAPER, context)['findings']
+        hedge = [f for f in findings if 'more certain' in f.headline]
+        self.assertTrue(hedge)
+        self.assertEqual(hedge[0].source, "The headline says")
+
+    def test_every_finding_quotes_its_trigger(self):
+        # The module's credibility rests on never asserting without evidence.
+        for text in (OVERCLAIMING_PAPER, SOUND_PAPER):
+            for finding in self.module.analyze(text, self.context)['findings']:
+                with self.subTest(finding=finding.headline):
+                    self.assertTrue(finding.quoted.strip())
+                    self.assertTrue(finding.why.strip())
+
+    # -- report --
+
+    def test_report_states_it_does_not_judge_quality(self):
+        report = self.module.build_report(
+            OVERCLAIMING_PAPER, self.module.analyze(OVERCLAIMING_PAPER, self.context))
+        self.assertIn('does not assess whether the research is good', report)
+
+    def test_headline_checklist_names_the_design_limit(self):
+        analysis = self.module.analyze(OVERCLAIMING_PAPER, self.context)
+        checklist = self.module.supportable_headline(OVERCLAIMING_PAPER, analysis)
+        self.assertIn('association wording', checklist)
+
+    def test_module_quotes_original_not_translated_text(self):
+        translator = AcademicTranslator()
+        result = translator.translate_academic_document(
+            OVERCLAIMING_PAPER, modules=['scope'])
+        # 'p < 0.03' is expanded by the glossary; the quotes must not show that.
+        self.assertIn('p < 0.03', result.plain_english)
+
+    def test_no_designs_found_still_produces_a_report(self):
+        report = self.module.build_report(
+            "A short note.", self.module.analyze("A short note.", self.context))
+        self.assertIn('SCOPE CHECK', report)
+
+
 class AllModulesContractTests(unittest.TestCase):
     """Every shipped module must honour the AccessibilityModule contract"""
 
     def setUp(self):
         self.translator = AcademicTranslator()
 
-    def test_seven_modules_ship(self):
+    def test_all_modules_ship(self):
         self.assertEqual(
             sorted(self.translator.available_modules),
-            ['adhd', 'audio', 'autism', 'beginner', 'dyslexia', 'esl', 'visual'],
+            ['adhd', 'audio', 'autism', 'beginner', 'dyslexia', 'esl', 'scope',
+             'visual'],
         )
 
     def test_every_module_returns_usable_output(self):
@@ -673,7 +857,7 @@ class AllModulesContractTests(unittest.TestCase):
             SAMPLE_PAPER,
             modules=sorted(self.translator.available_modules),
         )
-        self.assertEqual(len(result.modules_applied), 7)
+        self.assertEqual(len(result.modules_applied), 8)
         self.assertTrue(result.plain_english.strip())
 
     def test_short_names_are_unique(self):

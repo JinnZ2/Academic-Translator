@@ -25,6 +25,7 @@ Academic-Translator/
 │   ├── beginner_reading.py     # Short words and sentences, reading level report
 │   ├── dyslexia_accessibility.py # Simplified vocabulary, pronunciation guides
 │   ├── esl_support.py          # Phrasal verbs, false friends, unit conversion
+│   ├── scope_check.py          # Claim vs. method: what the design can support
 │   └── visual_processing.py   # ASCII diagrams, flowcharts, visual metaphors
 ├── requirements.txt            # Optional per-format document readers
 ├── .gitignore                  # Git ignore rules
@@ -43,7 +44,15 @@ Academic-Translator/
    - `process_text(text, context)` — Transform text for accessibility
    - `get_additional_elements(text, context)` — Return visual aids, action items
 
-3. **`AcademicTranslator`** — Main class handling:
+3. **`ScopeModule`** (`modules/scope_check.py`) — The one module that reasons
+   about content rather than presentation. It compares a claim (the paper's
+   title, or a headline passed via `--headline`) against what the stated study
+   design, sample, and duration can support. Design rules live in `DESIGNS`;
+   each entry records the strongest claim that design permits. It reports
+   mismatches and always quotes the triggering text — it does not judge
+   research quality, which is a deliberate boundary, not an oversight.
+
+4. **`AcademicTranslator`** — Main class handling:
    - Subject area detection (medical, psychology, education, social science)
    - File text extraction (PDF/DOCX/TXT)
    - Jargon translation (~84 terms across multiple fields, see `term_matching.py`)
@@ -64,6 +73,12 @@ Modules are discovered at runtime from the `modules/` directory via `importlib`.
 Modules are imported by file path rather than by package name, so the tool
 works from any working directory. `discover_modules()` returns a
 `{short_name: file_stem}` mapping; `load_module()` accepts either.
+
+The `context` dict passed to both module methods carries `subject_area`,
+`reading_level`, `key_findings`, `external_headline` (from `--headline`), and
+`original_text`. Use `original_text` when a module needs the paper's own
+words: `process_text` receives text that has already been jargon-expanded, so
+a module that quotes the source must not quote the expansion.
 
 ## Dependencies
 
@@ -110,14 +125,18 @@ Output HTML reports are saved to the `academic_translations/` directory.
 python test_academic_translator.py     # or: python -m unittest discover
 ```
 
-86 tests covering translation, inflection and word-sense matching, all seven
+111 tests covering translation, inflection and word-sense matching, all eight
 accessibility modules, discovery and loading, and report generation. Standard
 library only — no test dependencies. Each module also has a runnable demo:
 `python modules/<file>.py`.
 
 `AllModulesContractTests` runs every discovered module against the same
 checks — usable output, non-empty extras, empty and tiny input, and chaining
-with the other six — so a new module is covered the moment it is added.
+with the other seven — so a new module is covered the moment it is added.
+
+`ScopeModuleTests` additionally asserts the module stays silent on a sound
+paper (`SOUND_PAPER`) while flagging an overclaiming one — false positives
+are the failure mode that would make it untrustworthy.
 
 ## Code Conventions
 

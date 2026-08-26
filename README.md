@@ -87,6 +87,24 @@ Run `python academic_translator.py --list-modules` to see what is installed.
 - **`dyslexia`** - Shorter sentences, simpler vocabulary, phonetic guides, extra spacing
 - **`visual`** - Converts text to ASCII diagrams, flowcharts, and visual metaphors
 
+**Reading the claim itself**
+
+- **`scope`** - Connects headline → abstract → methods → findings, and flags
+  claims the study design cannot support. Checks the causal-claim ceiling of
+  each design, who was actually studied, sample size, study duration against
+  long-term claims, significance reported without an effect size, surrogate
+  outcomes, and hedging that the title drops. Every flag quotes the text that
+  raised it.
+
+  Pass the headline that brought you to the paper and it checks *that* instead
+  of the paper's own title — the usual case, since papers are often careful
+  where the coverage is not:
+
+  ```bash
+  python academic_translator.py --file study.pdf --modules scope \
+      --headline "Your morning coffee prevents dementia, scientists prove"
+  ```
+
 **Reading levels and language**
 
 - **`beginner`** - Long words swapped for short ones *keeping tense and number*
@@ -414,6 +432,8 @@ with `translate_academic_jargon(text, subject, include_statistics=True)`.
 **Accessibility Focus:** Different minds process information differently. Our modular approach means you can customize translation for your specific needs.
 
 **Research Quality:** We help you understand research - we don’t evaluate if it’s good research. Always check study quality, sample size, and limitations.
+
+The `scope` module comes closest to this line, so it is worth being precise about where the line is. It reports **mismatches between a claim and the stated method** — “the headline says *prevents*; the methods say *cross-sectional*, which cannot show cause.” Study design is a fact about the paper. Whether the research is *good* — whether the measures were sensible, the analysis appropriate, the authors honest — is not something a regex can assess, and the module does not try. Every flag it raises quotes the text that triggered it, so you can overrule it.
 
 ## 🤝 Contributing
 
