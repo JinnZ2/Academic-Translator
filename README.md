@@ -5,7 +5,7 @@
 Transform academic papers, research studies, and technical documents into formats that work for different learning styles, reading levels, and cognitive differences. No more brilliant discoveries locked behind impenetrable jargon.
 
 ![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+![License](https://img.shields.io/badge/license-CC0_1.0-lightgrey.svg)
 ![Accessibility](https://img.shields.io/badge/accessibility-focused-brightgreen.svg)
 ![Modular](https://img.shields.io/badge/modular-architecture-orange.svg)
 
@@ -479,7 +479,7 @@ The best contributions:
 
 ## 📄 License
 
-MIT License - Use it, modify it, share it. Let’s democratize human knowledge together.
+CC0 1.0 Universal - Use it, modify it, share it. Let’s democratize human knowledge together.
 
 ## 🙏 Acknowledgments
 
