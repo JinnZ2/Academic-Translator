@@ -156,3 +156,17 @@ with the other six — so a new module is covered the moment it is added.
   cue vectors); see the module docstring in `term_matching.py`
 - Confidence scoring: base 70% + 10% for recognized subject + 10% for research elements + 10% for methodology found
 - HTML output uses inline CSS with gradient headers and color-coded sections
+
+<!-- clone-refspec-note v1 -->
+## Cloning and pushing
+Shallow clones are single-branch by default.
+Before pushing any branch other than main, run:
+
+    git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+    git fetch --depth 1
+
+Or clone with: git clone --depth 1 --no-single-branch <url>
+Without this, the first push of a new branch
+fails the tracking-ref check even when the
+commit landed.
+<!-- /clone-refspec-note v1 -->
