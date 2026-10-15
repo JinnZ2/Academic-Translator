@@ -5,7 +5,7 @@
 Academic Translator is a Python tool that converts complex academic research papers into plain-English explanations tailored to different audiences and learning styles. It supports PDF, DOCX, and TXT inputs and generates accessible HTML reports.
 
 **Language:** Python 3.8+
-**License:** MIT
+**License:** CC0 1.0 Universal for owner-authored work; any third-party material retains its own terms as recorded in `LICENSE_HISTORY.md`.
 
 ## Repository Structure
 
@@ -29,7 +29,9 @@ Academic-Translator/
 ├── requirements.txt            # Optional per-format document readers
 ├── .gitignore                  # Git ignore rules
 ├── README.md                   # Project documentation
-└── LICENSE                     # MIT License
+├── LICENSE                     # CC0 1.0 Universal legal text
+├── LICENSE_HISTORY.md           # Prior license texts and third-party exceptions
+└── READ_ME_THIS_WAY.md          # Reading and preservation guidance
 ```
 
 ## Architecture
