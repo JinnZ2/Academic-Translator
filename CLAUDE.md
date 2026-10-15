@@ -5,7 +5,7 @@
 Academic Translator is a Python tool that converts complex academic research papers into plain-English explanations tailored to different audiences and learning styles. It supports PDF, DOCX, and TXT inputs and generates accessible HTML reports.
 
 **Language:** Python 3.8+
-**License:** MIT
+**License:** CC0 1.0 Universal for owner-authored work; any third-party material retains its own terms as recorded in `LICENSE_HISTORY.md`.
 
 ## Repository Structure
 
@@ -29,7 +29,9 @@ Academic-Translator/
 ├── requirements.txt            # Optional per-format document readers
 ├── .gitignore                  # Git ignore rules
 ├── README.md                   # Project documentation
-└── LICENSE                     # MIT License
+├── LICENSE                     # CC0 1.0 Universal legal text
+├── LICENSE_HISTORY.md           # Prior license texts and third-party exceptions
+└── READ_ME_THIS_WAY.md          # Reading and preservation guidance
 ```
 
 ## Architecture
@@ -156,3 +158,18 @@ with the other six — so a new module is covered the moment it is added.
   cue vectors); see the module docstring in `term_matching.py`
 - Confidence scoring: base 70% + 10% for recognized subject + 10% for research elements + 10% for methodology found
 - HTML output uses inline CSS with gradient headers and color-coded sections
+
+<!-- clone-refspec-note v1.1 -->
+## Cloning and pushing
+Shallow clones are single-branch by default.
+Before pushing any branch other than the default
+branch, run:
+
+    git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+    git fetch --depth 1
+
+Or clone with: git clone --depth 1 --no-single-branch <url>
+Without this, the first push of a new branch
+fails the tracking-ref check even when the
+commit landed.
+<!-- /clone-refspec-note v1.1 -->

@@ -1,3 +1,5 @@
+Read [READ_ME_THIS_WAY.md](READ_ME_THIS_WAY.md) first.
+
 # Academic Translator
 
 **Making ALL Knowledge Accessible to ALL Minds**
@@ -5,7 +7,7 @@
 Transform academic papers, research studies, and technical documents into formats that work for different learning styles, reading levels, and cognitive differences. No more brilliant discoveries locked behind impenetrable jargon.
 
 ![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+![License](https://img.shields.io/badge/license-CC0_1.0-green.svg)
 ![Accessibility](https://img.shields.io/badge/accessibility-focused-brightgreen.svg)
 ![Modular](https://img.shields.io/badge/modular-architecture-orange.svg)
 
@@ -479,7 +481,7 @@ The best contributions:
 
 ## 📄 License
 
-MIT License - Use it, modify it, share it. Let’s democratize human knowledge together.
+CC0 1.0 Universal — the owner dedicates owner-authored work to the public domain to the fullest extent permitted by law. See [LICENSE](LICENSE). Any third-party material retains its own terms, recorded in [LICENSE_HISTORY.md](LICENSE_HISTORY.md).
 
 ## 🙏 Acknowledgments
 
